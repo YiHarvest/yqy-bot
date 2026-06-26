@@ -1,0 +1,107 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "iamai"
+version = "0.2.3"
+description = "Rust + Python cross-platform runtime framework with PyO3 packaging."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "loguru>=0.7,<1",
+    "pydantic>=2.11,<3",
+    "tomli>=2.0,<3",
+    "websockets>=15,<16",
+]
+
+[project.scripts]
+iamai = "iamai.__main__:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.15,<2",
+    "pytest>=8.3,<9",
+    "ruff>=0.11,<0.12",
+]
+docs = [
+    "sphinx>=8,<9",
+    "furo>=2024.8.6",
+]
+
+[tool.maturin]
+python-source = "python"
+module-name = "iamai._core"
+bindings = "pyo3"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+    "python/iamai",
+    "examples/_shared/src",
+    "examples/arcade-runtime/src",
+    "examples/echo-runtime/src",
+    "examples/group-assistant-runtime/src",
+    "examples/life-sim-runtime/src",
+    "examples/skill-chat-runtime/src",
+    "examples/persona-rp-runtime/src",
+    "examples/planner-executor-runtime/src",
+    "examples/react-runtime/src",
+    "examples/story-runtime/src",
+    "examples/supervisor-team-runtime/src",
+    "examples/state-runtime/src",
+]
+mypy_path = [
+    "python",
+    "examples/_shared/src",
+    "examples/arcade-runtime/src",
+    "examples/echo-runtime/src",
+    "examples/group-assistant-runtime/src",
+    "examples/life-sim-runtime/src",
+    "examples/skill-chat-runtime/src",
+    "examples/persona-rp-runtime/src",
+    "examples/planner-executor-runtime/src",
+    "examples/react-runtime/src",
+    "examples/story-runtime/src",
+    "examples/supervisor-team-runtime/src",
+    "examples/state-runtime/src",
+]
+namespace_packages = true
+explicit_package_bases = true
+show_error_codes = true
+pretty = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unreachable = true
+check_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["openai", "websockets"]
+ignore_missing_imports = true
+
+[tool.uv.workspace]
+members = [
+    "examples/_shared",
+    "examples/arcade-runtime",
+    "examples/echo-runtime",
+    "examples/group-assistant-runtime",
+    "examples/life-sim-runtime",
+    "examples/skill-chat-runtime",
+    "examples/persona-rp-runtime",
+    "examples/planner-executor-runtime",
+    "examples/react-runtime",
+    "examples/story-runtime",
+    "examples/supervisor-team-runtime",
+    "examples/state-runtime",
+    "examples/yqy_bot",
+]

@@ -1,0 +1,27 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["onebot11"]
+plugins = ["src/echo_runtime/plugins/echo.py:EchoPlugin"]
+superusers = ["echo-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+
+[adapter.onebot11]
+mode = "http"
+host = "127.0.0.1"
+port = 8081
+path = "/onebot/v11/http"
+api_base_url = "http://127.0.0.1:5700"
+access_token = ""
+platform = "qq"
+api_timeout = 10.0
+
+[plugin.echo]
+greeting = "你好，我是 iamai OneBot11 HTTP 示例运行时。"
+
+[plugin.management]
+allow_reload = true
+allow_introspection = true

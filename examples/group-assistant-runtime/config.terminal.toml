@@ -1,0 +1,37 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["terminal"]
+plugin_dirs = ["src/group_assistant_runtime/plugins"]
+python_paths = ["src"]
+superusers = ["group-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+config = true
+
+[state]
+backend = "json"
+path = ".iamai/state.json"
+
+[adapter.terminal]
+prompt = "group> "
+output_prefix = "group-assistant> "
+user_id = "group-user"
+self_id = "assistant-runtime"
+
+[plugin.management]
+allow_reload = true
+allow_config_reload = true
+allow_introspection = true
+
+[plugin.room]
+memory_limit = 24
+
+[plugin.assistant]
+summary_window = 12
+
+[plugin.assistant.llm]
+temperature = 0.6
+max_tokens = 520

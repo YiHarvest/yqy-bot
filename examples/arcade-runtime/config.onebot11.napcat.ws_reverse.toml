@@ -1,0 +1,41 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["onebot11"]
+plugin_dirs = ["src/arcade_runtime/plugins"]
+python_paths = ["src"]
+superusers = ["player-one"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+
+[adapter.onebot11]
+mode = "ws-reverse"
+host = "127.0.0.1"
+port = 8082
+path_event = "/event"
+path_api = "/api"
+access_token = ""
+platform = "qq"
+api_timeout = 10.0
+
+[plugin.management]
+allow_reload = true
+allow_config_reload = true
+allow_introspection = true
+
+[plugin.session]
+starting_coins = 20
+
+[plugin.arcade]
+wheel = [
+  ["meteor", -6],
+  ["treasure", 12],
+  ["lucky cat", 8],
+  ["banana peel", -3],
+  ["golden fish", 15],
+]
+
+[plugin.quests]
+daily_goal = 30

@@ -1,0 +1,6 @@
+{
+  "max_history_turns": 15,
+  "meme_api_url": "https://api.52vmy.cn/api/img/tu/qq",
+  "meme_save_keywords": ["存表情", "收藏表情", "学习表情包", "记住这个表情", "存这个", "收藏这个"],
+  "meme_send_keywords": ["发我的表情", "发我收藏的", "发收藏的", "我收藏的表情", "发个收藏", "来个收藏", "来张收藏的", "qq里收藏的"]
+}

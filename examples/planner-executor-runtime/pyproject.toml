@@ -1,0 +1,13 @@
+[project]
+name = "planner-executor-runtime"
+version = "0.1.0"
+description = "Planner / executor iamai example."
+requires-python = ">=3.10"
+dependencies = [
+    "iamai",
+    "iamai-example-utils",
+]
+
+[tool.uv.sources]
+iamai = { workspace = true }
+iamai-example-utils = { workspace = true }

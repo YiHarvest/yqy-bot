@@ -1,0 +1,38 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["onebot11"]
+plugin_dirs = ["src/react_runtime/plugins"]
+python_paths = ["src"]
+superusers = ["react-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+config = true
+
+[adapter.onebot11]
+mode = "ws-reverse"
+host = "127.0.0.1"
+port = 8082
+path_event = "/event"
+path_api = "/api"
+access_token = ""
+platform = "qq"
+api_timeout = 10.0
+
+[plugin.management]
+allow_reload = true
+allow_config_reload = true
+allow_introspection = true
+
+[plugin.memory]
+note_limit = 12
+trace_limit = 6
+
+[plugin.reactor]
+max_turns = 5
+
+[plugin.reactor.llm]
+temperature = 0.5
+max_tokens = 500

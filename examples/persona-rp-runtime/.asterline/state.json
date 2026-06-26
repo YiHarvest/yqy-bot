@@ -1,0 +1,12 @@
+{
+  "lounge": {
+    "active_persona": "noir-detective",
+    "dialogue": [
+      "persona-user: quit",
+      "persona-user: quit",
+      "persona-user: hello there",
+      "persona-user: quit",
+      "persona-user: quit"
+    ]
+  }
+}

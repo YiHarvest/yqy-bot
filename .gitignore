@@ -1,0 +1,81 @@
+.venv
+.env
+**/.env
+__pycache__/
+*.pyc
+.DS_Store
+target/
+dist/
+build/
+*.so
+*.pyd
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+docs/_build/
+docs/api/generated/
+
+*.log
+uv.lock
+
+# secrets
+.env
+*.env
+*.key
+*.pem
+*.token
+secrets/
+config.local.*
+*.local.toml
+*.local.json
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env/
+
+# logs
+logs/
+*.log
+
+# node / next
+node_modules/
+.next/
+docs/.next/
+
+# cache
+.cache/
+.DS_Store
+
+# secrets
+.env
+.env.local
+*.env
+*.key
+*.pem
+*.token
+secrets/
+
+# node / next cache
+node_modules/
+.next/
+docs/.next/
+
+# python cache
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# logs
+logs/
+*.log
+
+# bot runtime cache
+examples/yqy_bot/data/memes/cache/
+examples/yqy_bot/data/**/*.db
+examples/yqy_bot/data/**/*.sqlite
+examples/yqy_bot/data/**/*.jsonl

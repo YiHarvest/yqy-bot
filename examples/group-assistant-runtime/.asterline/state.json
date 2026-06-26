@@ -1,0 +1,13 @@
+{
+  "room": {
+    "rooms": {
+      "terminal": [
+        "group-user: hello room",
+        "group-user: quit",
+        "group-user: quit",
+        "group-user: ai hello",
+        "group-user: quit"
+      ]
+    }
+  }
+}

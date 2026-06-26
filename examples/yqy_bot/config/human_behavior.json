@@ -1,0 +1,18 @@
+{
+  "typing_delay": {
+    "min_seconds": 1,
+    "max_seconds": 6
+  },
+  "message_split": {
+    "split_enabled": false,
+    "min_chars": 10,
+    "split_delay_seconds": 2,
+    "max_parts": 2
+  },
+  "quote_reply_probability": 0.3,
+  "poke_cooldown_hours": 24,
+  "message_length": {
+    "prefer_short_pct": 80,
+    "short_max_chars": 20
+  }
+}

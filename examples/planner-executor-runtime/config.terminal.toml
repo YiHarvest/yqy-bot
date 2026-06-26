@@ -1,0 +1,36 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["terminal"]
+plugin_dirs = ["src/planner_executor_runtime/plugins"]
+python_paths = ["src"]
+superusers = ["planner-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+
+[adapter.terminal]
+prompt = "plan> "
+output_prefix = "planner-executor> "
+user_id = "planner-user"
+self_id = "planner-runtime"
+
+[plugin.management]
+allow_reload = true
+allow_config_reload = true
+allow_introspection = true
+
+[plugin.session]
+history_limit = 6
+
+[plugin.planner]
+max_steps = 4
+
+[plugin.planner.llm]
+temperature = 0.4
+max_tokens = 700
+
+[plugin.executor.llm]
+temperature = 0.7
+max_tokens = 700

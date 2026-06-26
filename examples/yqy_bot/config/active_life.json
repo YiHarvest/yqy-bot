@@ -1,0 +1,11 @@
+{
+  "tick_interval_seconds": 600,
+  "loneliness_threshold": 70,
+  "energy_threshold": 30,
+  "cooldown_hours": 4,
+  "recent_history_turns": 10,
+  "post_action": {
+    "energy_delta": -2,
+    "loneliness_delta": -5
+  }
+}

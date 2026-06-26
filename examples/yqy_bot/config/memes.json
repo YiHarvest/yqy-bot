@@ -1,0 +1,22 @@
+{
+  "happy": {
+    "api_url": "https://api.mtyqx.cn/api/random.php?return=json",
+    "description": "开心时发送 — 随机二次元美图"
+  },
+  "teasing": {
+    "api_url": "https://api.mtyqx.cn/tapi/random.php?return=json",
+    "description": "吐槽/阴阳怪气 — 随机二次元美图"
+  },
+  "comfort": {
+    "api_url": "https://api.mtyqx.cn/api/random.php?return=json",
+    "description": "安慰/关心 — 随机二次元美图"
+  },
+  "angry": {
+    "api_url": "https://api.mtyqx.cn/api/random.php?return=json",
+    "description": "烦躁 — 随机二次元美图"
+  },
+  "excited": {
+    "api_url": "https://api.mtyqx.cn/tapi/random.php?return=json",
+    "description": "兴奋 — 随机二次元美图"
+  }
+}

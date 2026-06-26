@@ -1,0 +1,31 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["terminal"]
+plugins = ["src/echo_runtime/plugins/echo.py:EchoPlugin"]
+superusers = ["terminal-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+
+[logging]
+level = "INFO"
+stderr = true
+file = "logs/echo-runtime.log"
+rotation = "5 MB"
+retention = "7 days"
+
+[adapter.terminal]
+prompt = "echo-runtime> "
+output_prefix = "iamai> "
+user_id = "terminal-user"
+self_id = "terminal-runtime"
+
+[plugin.echo]
+greeting = "你好，我是 iamai 示例运行时。"
+
+[plugin.management]
+allow_reload = true
+allow_config_reload = true
+allow_introspection = true

@@ -1,0 +1,41 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["onebot11"]
+plugin_dirs = ["src/group_assistant_runtime/plugins"]
+python_paths = ["src"]
+superusers = ["group-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+config = true
+
+[state]
+backend = "json"
+path = ".iamai/state.json"
+
+[adapter.onebot11]
+mode = "ws-reverse"
+host = "127.0.0.1"
+port = 8082
+path_event = "/event"
+path_api = "/api"
+access_token = ""
+platform = "qq"
+api_timeout = 10.0
+
+[plugin.management]
+allow_reload = true
+allow_config_reload = true
+allow_introspection = true
+
+[plugin.room]
+memory_limit = 24
+
+[plugin.assistant]
+summary_window = 12
+
+[plugin.assistant.llm]
+temperature = 0.6
+max_tokens = 520

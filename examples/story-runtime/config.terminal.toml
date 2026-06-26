@@ -1,0 +1,28 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["terminal"]
+plugin_dirs = ["src/story_runtime/plugins"]
+python_paths = ["src"]
+superusers = ["writer"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+
+[adapter.terminal]
+prompt = "story> "
+output_prefix = "story-runtime> "
+user_id = "writer"
+self_id = "director"
+
+[plugin.management]
+allow_reload = true
+allow_config_reload = true
+allow_introspection = true
+
+[plugin.memory]
+default_setting = "floating city"
+
+[plugin.director]
+narrator = "旁白"

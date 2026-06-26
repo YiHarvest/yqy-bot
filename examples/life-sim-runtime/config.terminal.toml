@@ -1,0 +1,34 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["terminal"]
+plugin_dirs = ["src/life_sim_runtime/plugins"]
+python_paths = ["src"]
+superusers = ["life-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+config = true
+
+[state]
+backend = "json"
+path = ".iamai/state.json"
+
+[adapter.terminal]
+prompt = "life> "
+output_prefix = "life-sim> "
+user_id = "life-user"
+self_id = "life-runtime"
+
+[plugin.management]
+allow_reload = true
+allow_config_reload = true
+allow_introspection = true
+
+[plugin.life]
+choices_per_scene = 3
+
+[plugin.life.llm]
+temperature = 0.8
+max_tokens = 620

@@ -1,0 +1,31 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["webhook"]
+plugins = ["src/echo_runtime/plugins/echo.py:EchoPlugin"]
+superusers = ["webhook-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+
+[adapter.webhook]
+host = "127.0.0.1"
+port = 8090
+path = "/events"
+platform = "webhook"
+# Loopback local development can leave this empty.
+# Public deployment should set both access_token and signature_secret.
+access_token = ""
+# signature_secret = "change-me"
+# reply_url_allowlist = ["hooks.example.com"]
+
+[plugin.echo]
+greeting = "你好，我是 iamai Webhook 示例运行时。"
+
+[plugin.management]
+# Development-oriented management commands. Keep them behind superusers.
+allow_reload = true
+allow_introspection = true
+reload_requires_superuser = true
+introspection_requires_superuser = true

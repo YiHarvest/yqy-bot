@@ -1,0 +1,25 @@
+{
+  "base_weights": {
+    "chat": 60,
+    "meme": 20,
+    "poke": 10
+  },
+  "thresholds": {
+    "energy_low": 20,
+    "loneliness_high": 80,
+    "mood_high": 80,
+    "favorability_high": 80,
+    "energy_tired": 40
+  },
+  "boosts": {
+    "chat_loneliness_boost": 30,
+    "meme_mood_boost": 30,
+    "poke_favorability_boost": 20
+  },
+  "defaults": {
+    "mood": 50,
+    "energy": 50,
+    "loneliness": 20,
+    "favorability": 50
+  }
+}

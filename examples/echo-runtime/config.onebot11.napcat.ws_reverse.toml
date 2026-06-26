@@ -1,0 +1,30 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["onebot11"]
+plugins = ["src/echo_runtime/plugins/echo.py:EchoPlugin"]
+superusers = ["echo-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+
+[adapter.onebot11]
+mode = "ws-reverse"
+host = "127.0.0.1"
+port = 8082
+path_event = "/event"
+path_api = "/api"
+access_token = ""
+platform = "qq"
+api_timeout = 10.0
+
+[plugin.echo]
+greeting = "你好，我是 Aster。"
+
+[plugin.management]
+# Development-oriented management commands. Keep them behind superusers.
+allow_reload = true
+allow_introspection = true
+reload_requires_superuser = true
+introspection_requires_superuser = true

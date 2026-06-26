@@ -1,0 +1,19 @@
+{
+  "id": "plugin.life_sim_example",
+  "name": "Life Sim Plugin Example",
+  "type": "plugin",
+  "summary": "Example stateful life simulator plugins for long-lived game state and structured choice scenes.",
+  "package": null,
+  "repository": "https://github.com/iamai/iamai",
+  "license": "MIT",
+  "status": "active",
+  "verification": ["official"],
+  "entry_points": [],
+  "tags": ["example", "plugin", "simulation", "state", "story"],
+  "platforms": ["terminal", "onebot11"],
+  "requires": [],
+  "install_command": null,
+  "docs_url": null,
+  "source_url": "https://github.com/iamai/iamai/tree/main/examples/life-sim-runtime",
+  "updated_at": "2026-04-26"
+}

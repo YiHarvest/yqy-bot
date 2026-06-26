@@ -1,0 +1,7 @@
+{
+  "positive_keywords": ["谢谢", "喜欢", "厉害", "聪明"],
+  "negative_keywords": ["笨蛋", "垃圾", "滚", "废物"],
+  "positive_favorability_delta": 2,
+  "negative_favorability_delta": -5,
+  "reply_intimacy_delta": 1
+}

@@ -1,0 +1,15 @@
+[project]
+name = "yqy-bot"
+version = "0.1.0"
+description = "YQY's personal QQ chatbot based on iamai."
+requires-python = ">=3.10"
+dependencies = [
+    "iamai",
+    "openai>=1.76,<2",
+    "fastapi>=0.100",
+    "uvicorn[standard]",
+    "httpx",
+]
+
+[tool.uv.sources]
+iamai = { workspace = true }

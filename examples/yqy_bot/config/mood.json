@@ -1,0 +1,38 @@
+{
+  "positive_keywords": ["谢谢", "厉害", "聪明", "喜欢", "可爱", "好棒", "真棒", "nice", "牛逼", "牛"],
+  "negative_keywords": ["傻逼", "笨蛋", "垃圾", "滚", "sb", "SB", "废物", "恶心"],
+  "mood_labels": {
+    "0-20": "非常低落",
+    "21-40": "有点烦躁",
+    "41-60": "正常",
+    "61-80": "开心",
+    "81-100": "特别开心"
+  },
+  "energy_labels": {
+    "0-20": "很疲惫",
+    "21-50": "有点累",
+    "51-100": "精力正常"
+  },
+  "loneliness_labels": {
+    "0-20": "满足",
+    "21-50": "普通",
+    "51-80": "有点想找人聊天",
+    "81-100": "非常想找人聊天"
+  },
+  "tick": {
+    "energy_decay_seconds": 3600,
+    "energy_decay_delta": -1,
+    "loneliness_rise_12h_seconds": 43200,
+    "loneliness_rise_12h_delta": 2,
+    "loneliness_rise_24h_seconds": 86400,
+    "loneliness_rise_24h_delta": 3
+  },
+  "message_reaction": {
+    "loneliness_delta": -3,
+    "positive_mood_delta": 3,
+    "negative_mood_delta": -8
+  },
+  "reply_cost": {
+    "energy_delta": -1
+  }
+}

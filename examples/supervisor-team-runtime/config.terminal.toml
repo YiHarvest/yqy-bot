@@ -1,0 +1,33 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["terminal"]
+plugin_dirs = ["src/supervisor_team_runtime/plugins"]
+python_paths = ["src"]
+superusers = ["supervisor-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+
+[adapter.terminal]
+prompt = "team> "
+output_prefix = "supervisor-team> "
+user_id = "supervisor-user"
+self_id = "supervisor-runtime"
+
+[plugin.management]
+allow_reload = true
+allow_config_reload = true
+allow_introspection = true
+
+[plugin.workers]
+worker_temperature = 0.8
+
+[plugin.workers.llm]
+temperature = 0.7
+max_tokens = 520
+
+[plugin.supervisor.llm]
+temperature = 0.5
+max_tokens = 650

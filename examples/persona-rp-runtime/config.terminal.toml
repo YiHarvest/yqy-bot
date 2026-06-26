@@ -1,0 +1,36 @@
+[runtime]
+log_level = "INFO"
+command_prefixes = ["/"]
+adapters = ["terminal"]
+plugin_dirs = ["src/persona_rp_runtime/plugins"]
+python_paths = ["src"]
+superusers = ["persona-user"]
+
+[runtime.hot_reload]
+enabled = true
+interval = 1.0
+config = true
+
+[state]
+backend = "json"
+path = ".iamai/state.json"
+
+[adapter.terminal]
+prompt = "persona> "
+output_prefix = "persona-rp> "
+user_id = "persona-user"
+self_id = "persona-runtime"
+
+[plugin.management]
+allow_reload = true
+allow_config_reload = true
+allow_introspection = true
+
+[plugin.lounge]
+memory_limit = 18
+
+[plugin.persona]
+
+[plugin.persona.llm]
+temperature = 0.9
+max_tokens = 420
