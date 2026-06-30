@@ -19,8 +19,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
-import httpx
-from loguru import logger
+import httpx  # noqa: E402
+from loguru import logger  # noqa: E402
 
 CACHE_DIR = _PROJECT_ROOT / "data" / "memes" / "cache"
 TEST_FILE = "test.gif"
@@ -45,7 +45,9 @@ async def test_fastapi_health() -> bool:
             resp = await client.get("http://127.0.0.1:8000/health")
             if resp.status_code == 200:
                 data = resp.json()
-                logger.info(f"FastAPI 健康检查 OK: cached_files={data.get('cached_files')}")
+                logger.info(
+                    f"FastAPI 健康检查 OK: cached_files={data.get('cached_files')}"
+                )
                 return True
             logger.error(f"FastAPI 健康检查失败 HTTP={resp.status_code}")
     except Exception as exc:
@@ -175,6 +177,7 @@ async def _test_remote_api() -> bool:
     """斗图 API 联通性测试（可选），不阻塞核心流程。"""
     try:
         from services.meme_service import MemeService
+
         svc = MemeService()
         url = await svc.get_meme_url("happy")
         if url:
@@ -188,4 +191,5 @@ async def _test_remote_api() -> bool:
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

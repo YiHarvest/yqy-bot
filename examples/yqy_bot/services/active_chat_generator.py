@@ -1,31 +1,16 @@
 """主动话题生成服务：结合记忆、反思、社交关系，生成有上下文的主动消息。
 禁止生成"在吗""最近怎么样""干嘛呢""忙吗"等通用废话。
+配置已合并到 config_service.py。
 """
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 from iamai import LLMClient, LLMConfig
 from loguru import logger
 
-_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "active_life.json"
-
-
-def _load() -> dict:
-    if _CONFIG_PATH.is_file():
-        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-    return {}
-
-
-_cfg = _load()
-
-BANNED_PHRASES: list[str] = [
-    "在吗", "最近怎么样", "干嘛呢", "忙吗", "最近还好吗",
-    "吃了吗", "睡了没", "想你了", "好久不见", "今天天气不错",
-]
+from .config_service import BANNED_PHRASES
 
 
 class ConversationStarterService:
@@ -42,7 +27,9 @@ class ConversationStarterService:
     ) -> str | None:
         """返回生成的主动消息，若 LLM 失败则返回 None。"""
         memory_block = "\n".join(f"- {m}" for m in memories) if memories else ""
-        reflection_block = "\n".join(f"- {r}" for r in reflections) if reflections else ""
+        reflection_block = (
+            "\n".join(f"- {r}" for r in reflections) if reflections else ""
+        )
 
         history_block = ""
         if history:
@@ -79,41 +66,43 @@ class ConversationStarterService:
         if history_block:
             prompt_parts.append(f"\n## 最近聊天记录\n{history_block}")
 
-        prompt_parts.extend([
-            "",
-            "## 生成规则",
-            "- 必须结合上面的记忆/观察/聊天记录，说一句自然的话",
-            "- 像真人朋友突然想到什么，随口问一句或吐槽一句",
-            "- 只返回这一句话，不要加任何前缀或解释",
-            "- 一句话不超过 20 字",
-            "",
-            "## 事实约束（重要）",
-            "- 禁止编造不存在的过去经历、虚构事件",
-            "- 吐槽只能基于记忆和聊天记录中已有的事实",
-            "- 如果你没有记忆依据，不要假装你记得某事",
-            "- 禁止编造对方的行为、地点、穿着等具体细节",
-            "",
-            "## 正确例子",
-            "- Agent项目还活着吗",
-            "- 考试结束没",
-            "- 你那个bug搞定了吗",
-            "- 今天不会又在摸鱼吧",
-            "- 听说你最近熬夜了",
-            "",
-            "## 禁止生成（绝对不要说这些）",
-            "- 在吗",
-            "- 最近怎么样",
-            "- 干嘛呢",
-            "- 忙吗",
-            "- 最近还好吗",
-            "- 吃了吗",
-            "- 睡了没",
-            "- 想你了",
-            "- 好久不见",
-            "- 今天天气不错",
-            "- 「上次你xxx」「我记得你xxx」「你之前xxx」等虚构回忆",
-            "- 任何不依赖上下文的通用问候",
-        ])
+        prompt_parts.extend(
+            [
+                "",
+                "## 生成规则",
+                "- 必须结合上面的记忆/观察/聊天记录，说一句自然的话",
+                "- 像真人朋友突然想到什么，随口问一句或吐槽一句",
+                "- 只返回这一句话，不要加任何前缀或解释",
+                "- 一句话不超过 20 字",
+                "",
+                "## 事实约束（重要）",
+                "- 禁止编造不存在的过去经历、虚构事件",
+                "- 吐槽只能基于记忆和聊天记录中已有的事实",
+                "- 如果你没有记忆依据，不要假装你记得某事",
+                "- 禁止编造对方的行为、地点、穿着等具体细节",
+                "",
+                "## 正确例子",
+                "- Agent项目还活着吗",
+                "- 考试结束没",
+                "- 你那个bug搞定了吗",
+                "- 今天不会又在摸鱼吧",
+                "- 听说你最近熬夜了",
+                "",
+                "## 禁止生成（绝对不要说这些）",
+                "- 在吗",
+                "- 最近怎么样",
+                "- 干嘛呢",
+                "- 忙吗",
+                "- 最近还好吗",
+                "- 吃了吗",
+                "- 睡了没",
+                "- 想你了",
+                "- 好久不见",
+                "- 今天天气不错",
+                "- 「上次你xxx」「我记得你xxx」「你之前xxx」等虚构回忆",
+                "- 任何不依赖上下文的通用问候",
+            ]
+        )
 
         prompt = "\n".join(prompt_parts)
 

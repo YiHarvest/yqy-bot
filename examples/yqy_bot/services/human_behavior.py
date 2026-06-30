@@ -14,21 +14,13 @@ import asyncio
 import json
 import random
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
-_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "human_behavior.json"
+from .config_service import get_human_behavior_config
 
-
-def _load() -> dict:
-    if _CONFIG_PATH.is_file():
-        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-    return {}
-
-
-_cfg = _load()
+_cfg = get_human_behavior_config()
 
 _delay = _cfg.get("typing_delay", {})
 _split = _cfg.get("message_split", {})
@@ -49,6 +41,7 @@ SHORT_MAX_CHARS: int = int(_length.get("short_max_chars", 20))
 # ═══════════════════════════════════════════
 #  消息段辅助函数
 # ═══════════════════════════════════════════
+
 
 def _image_segment(url: str) -> dict[str, Any]:
     """创建 OneBot11 image 消息段。"""
@@ -91,7 +84,7 @@ def _split_text(text: str, max_len: int | None = None, max_parts: int = 2) -> li
         return [text]
 
     # 只拆第一段 + 剩余部分
-    limit = min(max_parts, 2)
+    _limit = min(max_parts, 2)  # noqa: F841
     mid = len(text) // 2
     for sep in "。！？\n":
         pos = text.rfind(sep, mid - 10, mid + 10)
@@ -103,6 +96,7 @@ def _split_text(text: str, max_len: int | None = None, max_parts: int = 2) -> li
 # ═══════════════════════════════════════════
 #  戳一戳冷却
 # ═══════════════════════════════════════════
+
 
 class PokeCooldown:
     """按用户记录最近一次戳一戳时间，24h 内不重复。"""
@@ -131,6 +125,7 @@ def get_poke_cooldown() -> PokeCooldown:
 #  TypingBehaviorService
 # ═══════════════════════════════════════════
 
+
 class TypingBehaviorService:
     """真人行为模拟：打字延迟 → 引用回复 → 图片/表情 → 文字分拆发送。"""
 
@@ -143,8 +138,20 @@ class TypingBehaviorService:
         meme_mface_data: dict[str, Any] | None = None,
         face_id: str = "",
         event_message: Any = None,
+        target: dict[str, str] | None = None,
     ) -> None:
-        """模拟真人发送消息。只用于私聊。
+        """模拟真人发送消息。支持私聊和群聊。
+
+        Args:
+            adapter: 适配器实例
+            user_id: 用户 ID（用于日志）
+            text: 文本内容
+            meme_url: 图片 URL
+            meme_mface_data: mface 数据
+            face_id: QQ 表情 ID
+            event_message: 原始消息（用于引用回复）
+            target: 发送目标，如 {"user_id": "xxx"} 或 {"group_id": "xxx"}
+                   如果为 None，默认使用 {"user_id": user_id}（私聊）
 
         - 随机打字延迟 1~6 秒
         - 30% 概率引用上一条消息
@@ -156,7 +163,12 @@ class TypingBehaviorService:
         delay = random.uniform(TY_DELAY_MIN, TY_DELAY_MAX)
         await asyncio.sleep(delay)
 
-        # ── 2. 引用回复（30% 概率）──
+        # ── 2. 确定发送目标 ──
+        # 如果没有指定 target，默认使用 user_id（私聊）
+        if target is None:
+            target = {"user_id": user_id}
+
+        # ── 3. 引用回复（30% 概率）──
         use_quote = random.random() < QUOTE_REPLY_PROB
         quote_id: str | None = None
         if use_quote and event_message is not None:
@@ -178,7 +190,9 @@ class TypingBehaviorService:
         if meme_url:
             logger.info(f"[真人发送] 图片URL: {meme_url[:80]}")
         if meme_mface_data:
-            logger.info(f"[真人发送] mface: {json.dumps(meme_mface_data, ensure_ascii=False)[:80]}")
+            logger.info(
+                f"[真人发送] mface: {json.dumps(meme_mface_data, ensure_ascii=False)[:80]}"
+            )
 
         # ── 4. 文本分拆（仅当 split_enabled=true 时才拆）──
         if SPLIT_ENABLED:
@@ -222,21 +236,27 @@ class TypingBehaviorService:
                 f"segments={[s['type'] for s in segments]}"
             )
 
-            # 构造 Message 并发送（私聊）
+            # 构造 Message 并发送（私聊或群聊）
             from iamai import Message  # 延迟导入，避免模块级依赖 iamai
+
             msg = Message(segments)
             try:
                 await adapter.send_message(
                     msg,
-                    target={"user_id": user_id},
+                    target=target,
                 )
+                # 根据目标类型生成日志
+                target_type = "group_id" if "group_id" in target else "user_id"
+                target_id = target.get(target_type, user_id)
                 logger.info(
-                    f"[真人发送] → {user_id} "
+                    f"[真人发送] → {target_id} "
                     f"chunk={i+1}/{len(text_chunks)} "
                     f"types={[s['type'] for s in segments]}"
                 )
             except Exception:
-                logger.exception(f"[真人发送] 发送失败: user={user_id} chunk={i+1}")
+                target_type = "group_id" if "group_id" in target else "user_id"
+                target_id = target.get(target_type, user_id)
+                logger.exception(f"[真人发送] 发送失败: target={target_id} chunk={i+1}")
                 return
 
             # 分段间间隔
@@ -257,6 +277,7 @@ async def send_human_like(
     meme_mface_data: dict[str, Any] | None = None,
     face_id: str = "",
     event_message: Any = None,
+    target: dict[str, str] | None = None,
 ) -> None:
     """向后兼容的模块级函数，委托给 TypingBehaviorService。"""
     await _typing_service.send_human_like(
@@ -267,4 +288,5 @@ async def send_human_like(
         meme_mface_data=meme_mface_data,
         face_id=face_id,
         event_message=event_message,
+        target=target,
     )

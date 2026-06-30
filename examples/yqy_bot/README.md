@@ -21,6 +21,102 @@ OPENAI_BASE_URL=https://api.deepseek.com
 OPENAI_MODEL=deepseek-chat
 ```
 
+## Docker 部署（Linux）
+
+如果你在 Linux 服务器上运行，推荐使用 Docker 部署，无需手动安装 NapCatQQ。
+
+### 1. 配置环境变量
+
+在项目根目录创建 `.env` 文件：
+
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_BASE_URL=https://api.deepseek.com
+OPENAI_MODEL=deepseek-chat
+```
+
+### 2. 启动服务
+
+```bash
+cd /home/yqy/Projects
+NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose up -d --no-build
+```
+
+### 3. 登录 QQ
+
+访问 http://127.0.0.1:6099/webui
+
+**需要重新登录吗？**
+
+不一定。访问 webui 后，如果已保留登录态就不用重新扫码。如果提示扫码或日志显示：
+
+```text
+请扫描下面的二维码，然后在手Q上授权登录
+```
+
+则需要重新扫码登录。
+
+NapCat 的数据挂载在：
+- `/home/yqy/Projects/napcat/qq`
+- `/home/yqy/Projects/napcat/config`
+
+正常重启容器后配置和登录数据会保留。但 QQ 登录态有时会失效，需要重新扫码。
+
+### 4. 查看日志
+
+查看机器人日志：
+
+```bash
+docker logs -f qqbot
+```
+
+查看 NapCat 日志：
+
+```bash
+docker logs -f napcat
+```
+
+查看最近 100 行：
+
+```bash
+docker logs --tail=100 qqbot
+docker logs --tail=100 napcat
+```
+
+### 5. 确认服务正常
+
+```bash
+cd /home/yqy/Projects
+docker compose ps
+```
+
+看到：
+
+```text
+napcat Up
+qqbot Up
+```
+
+然后给 QQ 发一句话，查看 `qqbot` 日志：
+
+```bash
+docker logs -f qqbot
+```
+
+如果有：
+
+```text
+onebot11/message text='你好'
+```
+
+说明消息已进入机器人，服务正常。
+
+---
+
+## 手动部署（Windows）
+
+以下为 Windows 手动部署步骤。
+
 ### 3. 启动 NapCatQQ
 
 QQ 私聊需要 NapCatQQ 作为 OneBot11 适配器。

@@ -7,7 +7,8 @@ from __future__ import annotations
 from iamai import LLMClient, LLMConfig
 from loguru import logger
 
-from .reflection import MAX_REFLECTIONS_PER_DAY, ReflectionService
+from .config_service import MAX_REFLECTIONS_PER_DAY
+from .reflection import ReflectionService
 from .memory import MemoryService
 
 
@@ -36,7 +37,11 @@ class RelationshipReasoningService:
             return
 
         memory_text = "\n".join(f"- {m}" for m in memories)
-        reflection_text = "\n".join(f"- {r}" for r in recent_reflections) if recent_reflections else "（暂无反思）"
+        reflection_text = (
+            "\n".join(f"- {r}" for r in recent_reflections)
+            if recent_reflections
+            else "（暂无反思）"
+        )
 
         config = LLMConfig.from_mapping()
         prompt = (
@@ -60,8 +65,8 @@ class RelationshipReasoningService:
             "- yqy说他在开发Agent（这是事实复述）\n"
             "- yqy最近对Agent开发感兴趣（这是简单观察）\n"
             "- yqy上次熬夜到凌晨三点（编造的细节）\n\n"
-            "如果信息不足以做推理，返回 {\"save\": false}。\n"
-            "返回 JSON：{\"save\": true/false, \"reflection\": \"推理内容\", \"importance\": 0.1~1.0}"
+            '如果信息不足以做推理，返回 {"save": false}。\n'
+            '返回 JSON：{"save": true/false, "reflection": "推理内容", "importance": 0.1~1.0}'
         )
         try:
             result = await LLMClient(config).chat_json(

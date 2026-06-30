@@ -49,9 +49,7 @@ class HistoryService:
         finally:
             conn.close()
 
-    def get_recent_user_messages(
-        self, session_id: str, limit: int = 20
-    ) -> list[str]:
+    def get_recent_user_messages(self, session_id: str, limit: int = 20) -> list[str]:
         """返回最近 N 条 user 消息的纯文本列表（不含 assistant 消息）。
 
         用于构建事实闸门的 evidence_text，只取 user 角色。

@@ -4,22 +4,12 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
-from pathlib import Path
 
+from .config_service import get_mood_config
 from .db import get_connection
 
-_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "mood.json"
-
-
-def _load() -> dict:
-    if _CONFIG_PATH.is_file():
-        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-    return {}
-
-
-_cfg = _load()
+_cfg = get_mood_config()
 
 POSITIVE_KEYWORDS: frozenset[str] = frozenset(_cfg.get("positive_keywords", []))
 NEGATIVE_KEYWORDS: frozenset[str] = frozenset(_cfg.get("negative_keywords", []))
@@ -83,7 +73,9 @@ class MoodService:
         finally:
             conn.close()
 
-    def _update(self, mood_delta: int, energy_delta: int, loneliness_delta: int) -> None:
+    def _update(
+        self, mood_delta: int, energy_delta: int, loneliness_delta: int
+    ) -> None:
         conn = get_connection()
         try:
             state = self.get_state()
@@ -94,7 +86,12 @@ class MoodService:
                 """UPDATE persona_state
                    SET mood = ?, energy = ?, loneliness = ?, updated_at = ?
                    WHERE id = 1""",
-                (new_mood, new_energy, new_loneliness, datetime.now(timezone.utc).isoformat()),
+                (
+                    new_mood,
+                    new_energy,
+                    new_loneliness,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
             )
             conn.commit()
         finally:

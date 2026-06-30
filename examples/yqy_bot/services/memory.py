@@ -8,9 +8,7 @@ from .db import get_connection
 class MemoryService:
     """长期记忆读写服务。"""
 
-    def save_memory(
-        self, user_id: str, content: str, importance: float = 0.5
-    ) -> None:
+    def save_memory(self, user_id: str, content: str, importance: float = 0.5) -> None:
         """保存一条用户记忆。"""
         conn = get_connection()
         try:

@@ -1,51 +1,45 @@
 """主动行为插件：根据情绪、关系、长期记忆，YHarvest 主动联系用户。
-所有参数从 config/active_life.json 加载。
+配置从 config_service.py 加载。
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 from iamai import Message, Plugin
 from loguru import logger
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(_PROJECT_ROOT))
+# 路径配置
+from services.config_service import PROJECT_ROOT
 
-_CONFIG_DIR = _PROJECT_ROOT / "config"
+# 主动行为配置
+from services.config_service import (
+    TICK_INTERVAL,
+    LONELINESS_THRESHOLD,
+    ENERGY_THRESHOLD,
+    COOLDOWN_HOURS,
+    RECENT_HISTORY_TURNS,
+    BLOCKED_TARGETS,
+)
 
-# ── 热重载兼容：仅在 reload 时清空 services 缓存，排除 meme_server ──
+# 主动行为后状态变化
+from services.config_service import (
+    POST_ACTION_ENERGY_DELTA,
+    POST_ACTION_LONELINESS_DELTA,
+)
+
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# ── 热重载兼容：仅在 reload 时清空 services 缓存 ──
 _IMPORTED = globals().get("_IMPORTED", False)
 if _IMPORTED:
     for _mod in list(sys.modules):
-        if _mod.startswith("services.") and _mod != "services.meme_server":
+        if _mod.startswith("services."):
             del sys.modules[_mod]
 _IMPORTED = True
-
-
-def _load_json(filename: str) -> dict:
-    path = _CONFIG_DIR / filename
-    if path.is_file():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {}
-
-
-_active_cfg = _load_json("active_life.json")
-
-TICK_INTERVAL: int = int(_active_cfg.get("tick_interval_seconds", 600))
-LONELINESS_THRESHOLD: int = int(_active_cfg.get("loneliness_threshold", 70))
-ENERGY_THRESHOLD: int = int(_active_cfg.get("energy_threshold", 30))
-COOLDOWN_HOURS: int = int(_active_cfg.get("cooldown_hours", 4))
-RECENT_HISTORY_TURNS: int = int(_active_cfg.get("recent_history_turns", 10))
-
-_post = _active_cfg.get("post_action", {})
-POST_ACTION_ENERGY_DELTA: int = int(_post.get("energy_delta", -2))
-POST_ACTION_LONELINESS_DELTA: int = int(_post.get("loneliness_delta", -5))
 
 
 class ActiveLifePlugin(Plugin):
@@ -58,7 +52,7 @@ class ActiveLifePlugin(Plugin):
         super().__init__(*args, **kwargs)
         from services.active_chat_generator import ActiveChatGenerator
         from services.behavior import BehaviorService
-        from services.db import get_connection, init_db
+        from services.db import init_db
         from services.history import HistoryService
         from services.human_behavior import PokeCooldown
         from services.meme_service import MemeService
@@ -79,7 +73,6 @@ class ActiveLifePlugin(Plugin):
         self._meme_service = MemeService()
         self._chat_gen = ActiveChatGenerator()
         self._poke_cooldown = PokeCooldown()
-        self._get_conn = get_connection
 
         self._task: asyncio.Task[None] | None = None
 
@@ -132,7 +125,7 @@ class ActiveLifePlugin(Plugin):
         reason = decision["reason"]
 
         if action == "silent":
-            logger.info(f"Active check: 行为决策=silent, 跳过")
+            logger.info("Active check: 行为决策=silent, 跳过")
             return
 
         logger.info(
@@ -160,9 +153,12 @@ class ActiveLifePlugin(Plugin):
     # ── 目标选择 ──
 
     def _find_best_target(self) -> dict[str, Any] | None:
-        """返回好感度最高的用户。"""
+        """返回好感度最高的用户（排除黑名单）。"""
         users = self._rel.get_all_users()
-        return users[0] if users else None
+        for user in users:
+            if user["user_id"] not in BLOCKED_TARGETS:
+                return user
+        return None
 
     def _is_cooldown(self, user_id: str) -> bool:
         """检查该用户是否在冷却期内。"""
@@ -174,18 +170,6 @@ class ActiveLifePlugin(Plugin):
         except (ValueError, TypeError):
             return False
         return datetime.now(timezone.utc) - last_dt < timedelta(hours=COOLDOWN_HOURS)
-
-    def _log_action(self, user_id: str, action: str) -> None:
-        """写入行为日志。"""
-        conn = self._get_conn()
-        try:
-            conn.execute(
-                "INSERT INTO behavior_log (user_id, action) VALUES (?, ?)",
-                (user_id, action),
-            )
-            conn.commit()
-        finally:
-            conn.close()
 
     # ── 行为执行 ──
 
@@ -215,16 +199,17 @@ class ActiveLifePlugin(Plugin):
 
     async def _do_active_meme(self, user_id: str) -> None:
         """发送主动斗图表情包，按当前情绪选择分类。"""
+        adapters = getattr(self.runtime, "adapters", [])
+        if not adapters:
+            return
+
         state = self._mood.get_state()
         emotion = self._behavior.classify_emotion(state)
-        fav = await self._meme_service.get_meme_url(emotion)
+        fav = await self._meme_service.get_meme_url(adapters[0], emotion)
         if not fav:
             return
         msg = Message()
-        if fav["type"] == "mface":
-            msg.append("mface", **fav["data"])
-        else:
-            msg.append("image", file=fav["url"])
+        msg.append("image", file=fav["url"])  # 统一用 image 类型
         await self._send(user_id, msg)
 
     async def _do_active_poke(self, user_id: str) -> None:

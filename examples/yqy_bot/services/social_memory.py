@@ -1,7 +1,8 @@
-"""社会记忆网络：记录用户提到的人物关系，建立跨用户记忆图谱。
-"""
+"""社会记忆网络：记录用户提到的人物关系，建立跨用户记忆图谱。"""
 
 from __future__ import annotations
+
+from typing import Any
 
 from .db import get_connection
 

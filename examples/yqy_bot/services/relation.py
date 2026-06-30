@@ -4,24 +4,13 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
+from .config_service import get_relation_config, get_users_config
 from .db import get_connection
 
-_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "relation.json"
-_USERS_PATH = Path(__file__).resolve().parents[1] / "config" / "users.json"
-
-
-def _load_json(path: Path) -> dict:
-    if path.is_file():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {}
-
-
-_cfg = _load_json(_CONFIG_PATH)
+_cfg = get_relation_config()
 
 RELATION_POSITIVE: frozenset[str] = frozenset(_cfg.get("positive_keywords", []))
 RELATION_NEGATIVE: frozenset[str] = frozenset(_cfg.get("negative_keywords", []))
@@ -32,7 +21,7 @@ REPLY_INTIMACY_DELTA: int = int(_cfg.get("reply_intimacy_delta", 1))
 
 
 def _load_users() -> dict[str, dict[str, str]]:
-    return _load_json(_USERS_PATH)
+    return get_users_config()
 
 
 class RelationshipService:
@@ -137,7 +126,9 @@ class RelationshipService:
         if identity == "yqy":
             lines.append("关系：熟人，可以吐槽、玩梗、阴阳怪气。")
         elif identity == "妹妹":
-            lines.append("关系：平时可以温和，但她喜欢捉弄你，你是大王。她捉弄你时直接毒舌反击，不用惯着。")
+            lines.append(
+                "关系：平时可以温和，但她喜欢捉弄你，你是大王。她捉弄你时直接毒舌反击，不用惯着。"
+            )
         return "\n".join(lines)
 
     def get_all_users(self) -> list[dict[str, Any]]:
@@ -164,13 +155,28 @@ class RelationshipService:
             conn.close()
 
     def last_active_action(self, user_id: str) -> str | None:
-        """返回该用户最近一次主动行为的创建时间（ISO 字符串），无记录则返回 None。"""
+        """返回该用户最近一次主动行为的创建时间（ISO 字符串），无记录则返回 None。
+
+        已合并到 relationship 表的 last_active_time 字段。
+        """
         conn = get_connection()
         try:
             row = conn.execute(
-                "SELECT created_at FROM behavior_log WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+                "SELECT last_active_time FROM relationship WHERE user_id = ?",
                 (user_id,),
             ).fetchone()
-            return row[0] if row else None
+            return row[0] if row and row[0] else None
+        finally:
+            conn.close()
+
+    def update_last_active_time(self, user_id: str) -> None:
+        """更新用户最后一次主动行为时间。"""
+        conn = get_connection()
+        try:
+            conn.execute(
+                "UPDATE relationship SET last_active_time = CURRENT_TIMESTAMP WHERE user_id = ?",
+                (user_id,),
+            )
+            conn.commit()
         finally:
             conn.close()

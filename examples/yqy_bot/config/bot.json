@@ -2,5 +2,14 @@
   "max_history_turns": 15,
   "meme_api_url": "https://api.52vmy.cn/api/img/tu/qq",
   "meme_save_keywords": ["存表情", "收藏表情", "学习表情包", "记住这个表情", "存这个", "收藏这个"],
-  "meme_send_keywords": ["发我的表情", "发我收藏的", "发收藏的", "我收藏的表情", "发个收藏", "来个收藏", "来张收藏的", "qq里收藏的"]
+  "meme_send_keywords": ["发我的表情", "发我收藏的", "发收藏的", "我收藏的表情", "发个收藏", "来个收藏", "来张收藏的", "qq里收藏的"],
+  "meme_delete_keywords": ["删表情", "删除表情", "删收藏", "删除收藏"],
+  "group_reply": {
+    "enabled": true,
+    "base_probability": 0.15,
+    "cooldown_seconds": 60,
+    "trigger_keywords": ["YHarvest", "yqy", "YQY"],
+    "context_aware_enabled": true,
+    "max_replies_per_minute": 3
+  }
 }

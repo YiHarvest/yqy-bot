@@ -4,6 +4,7 @@
   "energy_threshold": 30,
   "cooldown_hours": 4,
   "recent_history_turns": 10,
+  "blocked_targets": ["2753364619"],
   "post_action": {
     "energy_delta": -2,
     "loneliness_delta": -5

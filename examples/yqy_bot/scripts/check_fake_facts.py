@@ -29,7 +29,9 @@ def load_keywords() -> list[str]:
     return []
 
 
-def check_table(conn: sqlite3.Connection, table: str, keywords: list[str]) -> list[dict]:
+def check_table(
+    conn: sqlite3.Connection, table: str, keywords: list[str]
+) -> list[dict]:
     results: list[dict] = []
     columns = _columns_for(table)
     if not columns:
@@ -57,7 +59,15 @@ def _columns_for(table: str) -> list[str]:
     if table == "reflection":
         return common
     if table == "social_memory":
-        return ["id", "subject_user", "target_user", "relation", "content", "importance", "created_at"]
+        return [
+            "id",
+            "subject_user",
+            "target_user",
+            "relation",
+            "content",
+            "importance",
+            "created_at",
+        ]
     return []
 
 
@@ -78,7 +88,9 @@ def main() -> None:
                 found_any = True
                 print(f"=== {table} === ({len(rows)} 条)")
                 for r in rows:
-                    print(f"  id={r.get('id')} 关键词={r['matched_kw']}  content={r['content'][:60]}")
+                    print(
+                        f"  id={r.get('id')} 关键词={r['matched_kw']}  content={r['content'][:60]}"
+                    )
                     for key, val in r.items():
                         if key not in ("id", "content", "matched_kw", "table"):
                             print(f"    {key}={val}")

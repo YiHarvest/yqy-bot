@@ -32,9 +32,7 @@ def load_keywords() -> list[str]:
 def delete_from(conn: sqlite3.Connection, table: str, keywords: list[str]) -> int:
     total = 0
     for kw in keywords:
-        cursor = conn.execute(
-            f"DELETE FROM {table} WHERE content LIKE ?", (f"%{kw}%",)
-        )
+        cursor = conn.execute(f"DELETE FROM {table} WHERE content LIKE ?", (f"%{kw}%",))
         total += cursor.rowcount
     return total
 
@@ -46,7 +44,9 @@ def list_history_candidates(conn: sqlite3.Connection, keywords: list[str]):
             (f"%{kw}%",),
         ).fetchall()
         for row in rows:
-            print(f"  chat_history id={row[0]} session={row[1]} role={row[2]} content={row[3][:60]}")
+            print(
+                f"  chat_history id={row[0]} session={row[1]} role={row[2]} content={row[3][:60]}"
+            )
 
 
 def delete_history(conn: sqlite3.Connection, keywords: list[str]) -> int:

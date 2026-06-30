@@ -1,229 +1,187 @@
-"""表情包服务：优先从本地收藏库发图，收藏库为空时回退到外部 API。
-所有配置从 config/memes.json 加载。
+"""表情包服务：使用 NapCat API 管理 QQ 客户端本地表情库。
+
+核心改动：
+- 存储：调用 /add_custom_face（需要本地文件路径）
+- 查询：调用 /fetch_custom_face 或 /fetch_custom_face_detail
+- 发送：直接用 URL 作为 image 类型
+- 删除：调用 /delete_custom_face
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
-import shutil
-from datetime import datetime, timezone
+import random
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import httpx
 from loguru import logger
 
-_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "memes.json"
-_CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "memes" / "cache"
-_FAVORITES_DIR = Path(__file__).resolve().parents[1] / "data" / "memes" / "favorites"
-_LOCAL_BASE = "http://127.0.0.1:8000/meme"
+from .config_service import get_memes_config, DATA_DIR
 
-_FAVORITES_DIR.mkdir(parents=True, exist_ok=True)
+if TYPE_CHECKING:
+    from iamai.adapter import Adapter
 
+# 本地缓存目录（用于下载后添加到 QQ）
+_DOWNLOAD_DIR = DATA_DIR / "memes" / "download"
+_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-def _load() -> dict:
-    if _CONFIG_PATH.is_file():
-        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-    return {}
-
-
-def _ensure_cache_dir() -> None:
-    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-
-_cfg = _load()
+# 外部 API 配置（回退方案）
+_cfg = get_memes_config()
 
 
 class MemeService:
-    """表情包服务：下载 → 缓存 → 返回本地 FastAPI URL。"""
+    """表情包服务：优先 NapCat API，回退到外部斗图 API。"""
 
     # ═══════════════════════════════════════════
-    #  本地收藏表情库
+    #  NapCat API：QQ 客户端本地表情库
     # ═══════════════════════════════════════════
 
-    async def get_favorite_meme_url(
-        self, user_id: str, emotion: str | None = None
-    ) -> dict[str, Any] | None:
-        """从本地收藏库取一张表情包。
-
-        Args:
-            user_id: 当前用户 ID
-            emotion: 情绪标签（可 None）
-
-        Returns:
-            image:  {"url": "http://127.0.0.1:8000/meme/favorites/{filename}", "type": "image", "data": None}
-            mface:  {"url": "", "type": "mface", "data": {mface_segment_data}}
-            None:   收藏库为空
-        """
-        from .db import get_connection
-
-        conn = get_connection()
+    async def get_qq_favorites(self, adapter: "Adapter", count: int = 48) -> list[str]:
+        """获取 QQ 客户端收藏表情 URL 列表。"""
         try:
-            row = None
-            # 1. 优先匹配同 emotion
-            if emotion:
-                row = conn.execute(
-                    """SELECT id, file_path, source_url, meme_type FROM favorite_memes
-                       WHERE user_id = ? AND emotion = ?
-                       ORDER BY usage_count ASC, RANDOM()
-                       LIMIT 1""",
-                    (user_id, emotion),
-                ).fetchone()
+            result = await adapter.call_api("fetch_custom_face", count=count)
+            if result.get("status") == "ok":
+                urls = result.get("data", [])
+                logger.info(f"MemeService: QQ收藏表情获取成功 count={len(urls)}")
+                return urls
+            logger.warning(f"MemeService: QQ收藏表情获取失败 {result}")
+            return []
+        except Exception as exc:
+            logger.warning(f"MemeService: fetch_custom_face 异常 error={exc}")
+            return []
 
-            # 2. 没有 emotion 匹配 → 随机取该用户任意一张
-            if row is None:
-                row = conn.execute(
-                    """SELECT id, file_path, source_url, meme_type FROM favorite_memes
-                       WHERE user_id = ?
-                       ORDER BY usage_count ASC, RANDOM()
-                       LIMIT 1""",
-                    (user_id,),
-                ).fetchone()
+    async def get_qq_favorites_detail(
+        self, adapter: "Adapter", count: int = 48
+    ) -> list[dict[str, Any]]:
+        """获取 QQ 客户端收藏表情详细信息（含 resId）。"""
+        try:
+            result = await adapter.call_api("fetch_custom_face_detail", count=count)
+            if result.get("status") == "ok":
+                data = result.get("data", {})
+                if isinstance(data, dict):
+                    records = data.get("emojiRecords") or data.get("records") or []
+                elif isinstance(data, list):
+                    records = data
+                else:
+                    records = []
+                logger.info(f"MemeService: QQ收藏表情详情获取成功 count={len(records)}")
+                return records
+            logger.warning(f"MemeService: fetch_custom_face_detail 失败 {result}")
+            return []
+        except Exception as exc:
+            logger.warning(f"MemeService: fetch_custom_face_detail 异常 error={exc}")
+            return []
 
-            if row is None:
-                logger.debug(f"MemeService: user={user_id} 本地收藏库为空")
-                return None
-
-            fav_id = row[0]
-            file_path = Path(row[1])
-            source_url = row[2]
-            meme_type = row[3] or "image"
-
-            # ── mface 类型：直接返回 mface 段数据 ──
-            if meme_type == "mface":
-                now = datetime.now(timezone.utc).isoformat()
-                conn.execute(
-                    "UPDATE favorite_memes SET usage_count = usage_count + 1, last_used_at = ? WHERE id = ?",
-                    (now, fav_id),
-                )
-                conn.commit()
-                try:
-                    mface_data = json.loads(source_url or "{}")
-                except (json.JSONDecodeError, TypeError):
-                    mface_data = {}
-                logger.info(f"MemeService: 命中本地收藏(mface) id={fav_id} emotion={emotion}")
-                return {"url": "", "type": "mface", "data": mface_data}
-
-            # ── image 类型 ──
-            if not file_path.is_file():
-                logger.warning(f"MemeService: favorites 文件不存在 {file_path}，删除记录")
-                conn.execute("DELETE FROM favorite_memes WHERE id = ?", (fav_id,))
-                conn.commit()
-                return None
-
-            filename = file_path.name
-            local_url = f"{_LOCAL_BASE}/favorites/{filename}"
-
-            # 更新使用计数
-            now = datetime.now(timezone.utc).isoformat()
-            conn.execute(
-                "UPDATE favorite_memes SET usage_count = usage_count + 1, last_used_at = ? WHERE id = ?",
-                (now, fav_id),
-            )
-            conn.commit()
-
-            logger.info(f"MemeService: 命中本地收藏 id={fav_id} emotion={emotion} → {local_url}")
-            return {"url": local_url, "type": "image", "data": None}
-        finally:
-            conn.close()
-
-    async def save_favorite_meme(
-        self,
-        user_id: str,
-        source: str,
-        emotion: str = "default",
-        tags: str = "",
-        is_url: bool = False,
-        meme_type: str = "image",
+    async def add_to_qq(
+        self, adapter: "Adapter", file_path: str | Path, is_origin: bool = True
     ) -> bool:
-        """保存一张表情包到本地收藏库。
-
-        Args:
-            user_id: 用户 ID
-            source: URL / 本地文件路径 / mface JSON 数据
-            emotion: 情绪标签
-            tags: 逗号分隔的标签
-            is_url: True 表示 source 是 URL，False 表示本地文件路径
-            meme_type: "image" 或 "mface"
-
-        Returns:
-            是否保存成功
-        """
-        try:
-            # ── mface 类型：直接存 mface 段数据到 source_url，不下载 ──
-            if meme_type == "mface":
-                from .db import get_connection
-
-                conn = get_connection()
-                try:
-                    # 用 dummy file_path（DB 要求 NOT NULL）
-                    conn.execute(
-                        """INSERT INTO favorite_memes (user_id, file_path, source_file, source_url, emotion, tags, meme_type)
-                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                        (user_id, "", None, source, emotion, tags, "mface"),
-                    )
-                    conn.commit()
-                    logger.info(
-                        f"MemeService: mface收藏保存成功 user={user_id} "
-                        f"emotion={emotion}"
-                    )
-                    return True
-                finally:
-                    conn.close()
-
-            # ── image 类型：保持原有下载逻辑 ──
-            if is_url:
-                filename, file_path = await self._download_to_favorites(source)
-                if file_path is None:
-                    return False
-                source_url = source
-                source_file = None
-            else:
-                src_path = Path(source)
-                if not src_path.is_file():
-                    logger.warning(f"MemeService: 本地源文件不存在 {source}")
-                    return False
-                file_hash = self._file_hash(str(src_path))
-                ext = src_path.suffix.lower().lstrip(".") or "gif"
-                if ext not in {"jpg", "jpeg", "png", "gif", "webp"}:
-                    ext = "gif"
-                filename = f"{file_hash}.{ext}"
-                file_path = _FAVORITES_DIR / filename
-                shutil.copy2(str(src_path), str(file_path))
-                source_url = None
-                source_file = str(src_path)
-
-            # 写入数据库
-            from .db import get_connection
-
-            conn = get_connection()
-            try:
-                conn.execute(
-                    """INSERT INTO favorite_memes (user_id, file_path, source_file, source_url, emotion, tags, meme_type)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (user_id, str(file_path), source_file, source_url, emotion, tags, "image"),
-                )
-                conn.commit()
-                logger.info(
-                    f"MemeService: 收藏表情保存成功 user={user_id} "
-                    f"emotion={emotion} file={filename}"
-                )
-                return True
-            finally:
-                conn.close()
-        except Exception:
-            logger.exception("MemeService: 收藏表情保存失败")
+        """将表情添加到 QQ 客户端本地表情库。"""
+        fp = Path(file_path)
+        if not fp.is_file():
+            logger.warning(f"MemeService: 文件不存在 {fp}")
             return False
 
-    async def _download_to_favorites(self, url: str) -> tuple[str, Path | None]:
-        """从 URL 下载图片到 favorites 目录。
+        try:
+            result = await adapter.call_api(
+                "add_custom_face",
+                file=str(fp),
+                is_origin=is_origin,
+            )
+            if result.get("status") == "ok":
+                logger.info(f"MemeService: QQ本地表情添加成功 file={fp}")
+                return True
+            logger.warning(f"MemeService: add_custom_face 失败 {result}")
+            return False
+        except Exception as exc:
+            logger.warning(f"MemeService: add_custom_face 异常 error={exc}")
+            return False
 
-        Returns:
-            (filename, file_path) 或 (filename, None) 表示失败
-        """
-        _FAVORITES_DIR.mkdir(parents=True, exist_ok=True)
-        file_hash = self._file_hash(url)
+    async def delete_from_qq(self, adapter: "Adapter", res_id: str | list[str]) -> bool:
+        """从 QQ 客户端删除收藏表情。"""
+        try:
+            result = await adapter.call_api("delete_custom_face", res_id=res_id)
+            if result.get("status") == "ok":
+                logger.info(f"MemeService: QQ本地表情删除成功 res_id={res_id}")
+                return True
+            logger.warning(f"MemeService: delete_custom_face 失败 {result}")
+            return False
+        except Exception as exc:
+            logger.warning(f"MemeService: delete_custom_face 异常 error={exc}")
+            return False
+
+    # ═══════════════════════════════════════════
+    #  发送表情：优先 QQ 收藏，回退外部 API
+    # ═══════════════════════════════════════════
+
+    async def get_meme_url(
+        self,
+        adapter: "Adapter",
+        emotion: str | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """获取表情包 URL：优先 QQ 收藏库，否则回退外部 API。"""
+        # ── 优先 QQ 收藏表情 ──
+        urls = await self.get_qq_favorites(adapter, count=48)
+        if urls:
+            url = random.choice(urls)
+            logger.info(f"MemeService: 命中QQ收藏 emotion={emotion} → {url[:60]}")
+            return {"url": url, "type": "image", "data": None}
+
+        # ── 回退外部斗图 API ──
+        category = _cfg.get(emotion or "teasing", {})
+        api_url = category.get("api_url", "")
+        if api_url:
+            remote_url = await self._fetch_remote_url(api_url)
+            if remote_url:
+                logger.info(
+                    f"MemeService: 回退外部API emotion={emotion} → {remote_url[:60]}"
+                )
+                return {"url": remote_url, "type": "image", "data": None}
+
+        logger.warning(f"MemeService: 无表情可用 emotion={emotion}")
+        return None
+
+    # ═══════════════════════════════════════════
+    #  保存表情：下载 → 添加到 QQ
+    # ═══════════════════════════════════════════
+
+    async def save_from_url(self, adapter: "Adapter", url: str) -> bool:
+        """从 URL 下载图片并添加到 QQ 本地表情库。"""
+        file_path = await self._download_to_temp(url)
+        if file_path is None:
+            return False
+
+        success = await self.add_to_qq(adapter, file_path)
+
+        # 清理临时文件
+        try:
+            file_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        return success
+
+    async def save_from_local(self, adapter: "Adapter", file_path: str | Path) -> bool:
+        """从本地文件添加到 QQ 本地表情库。"""
+        return await self.add_to_qq(adapter, file_path)
+
+    async def save_from_mface(
+        self, adapter: "Adapter", mface_data: dict[str, Any]
+    ) -> bool:
+        """从 mface 数据添加到 QQ 本地表情库。"""
+        url = mface_data.get("url") or mface_data.get("emoji_url") or ""
+        if not url:
+            logger.warning("MemeService: mface 缺少 url，无法保存到 QQ")
+            return False
+        return await self.save_from_url(adapter, url)
+
+    # ═══════════════════════════════════════════
+    #  辅助方法
+    # ═══════════════════════════════════════════
+
+    async def _download_to_temp(self, url: str) -> Path | None:
+        """从 URL 下载图片到临时目录。"""
         try:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(15.0),
@@ -231,103 +189,25 @@ class MemeService:
             ) as client:
                 resp = await client.get(url)
                 if resp.status_code != 200:
-                    logger.warning(f"MemeService: favorites下载失败 HTTP={resp.status_code}")
-                    return "", None
+                    logger.warning(f"MemeService: 下载失败 HTTP={resp.status_code}")
+                    return None
 
                 content = resp.content
-                if len(content) > 10 * 1024 * 1024:  # 10MB 限制
-                    logger.warning(f"MemeService: favorites图片过大 {len(content)} bytes")
-                    return "", None
+                if len(content) > 10 * 1024 * 1024:
+                    logger.warning(f"MemeService: 图片过大 {len(content)} bytes")
+                    return None
 
-                # 推断扩展名
                 ext = self._guess_ext(url, content)
+                file_hash = hashlib.md5(url.encode()).hexdigest()
                 filename = f"{file_hash}.{ext}"
-                file_path = _FAVORITES_DIR / filename
+                file_path = _DOWNLOAD_DIR / filename
+
                 file_path.write_bytes(content)
-                logger.info(f"MemeService: favorites下载成功 size={len(content)} file={filename}")
-                return filename, file_path
+                logger.info(f"MemeService: 下载成功 size={len(content)} → {file_path}")
+                return file_path
         except Exception as exc:
-            logger.warning(f"MemeService: favorites下载异常 url={url[:60]} error={exc}")
-            return "", None
-
-    @staticmethod
-    def _file_hash(source: str) -> str:
-        return hashlib.md5(source.encode()).hexdigest()
-
-    @staticmethod
-    def _guess_ext(url: str, content: bytes) -> str:
-        """根据 URL 后缀或文件头推断扩展名。"""
-        # 先看 URL
-        path_part = url.split("?")[0]
-        last_seg = path_part.rstrip("/").rsplit("/", 1)[-1]
-        if "." in last_seg:
-            raw_ext = last_seg.rsplit(".", 1)[-1].lower()
-            if raw_ext in {"jpg", "jpeg", "png", "gif", "webp"}:
-                return raw_ext
-        # 再看 magic bytes
-        if content[:4] == b"\x89PNG":
-            return "png"
-        if content[:3] == b"GIF":
-            return "gif"
-        if content[:2] == b"\xff\xd8":
-            return "jpg"
-        if content[:4] in (b"RIFF",) and content[8:12] == b"WEBP":
-            return "webp"
-        return "gif"
-
-    # ═══════════════════════════════════════════
-    #  外部 API（回退方案）
-    # ═══════════════════════════════════════════
-
-    async def get_meme_url(self, emotion: str, user_id: str | None = None) -> dict[str, Any] | None:
-        """获取表情包 URL：优先本地收藏库，否则回退到外部 API。
-
-        Args:
-            emotion: happy / teasing / comfort / angry / excited
-            user_id: 当前用户 ID（用于查本地收藏库）
-
-        Returns:
-            image:  {"url": "http://127.0.0.1:8000/meme/{filename}", "type": "image", "data": None}
-            mface:  {"url": "", "type": "mface", "data": {mface_segment_data}}
-            None:   获取失败
-        """
-        # ── 优先本地收藏库 ──
-        if user_id:
-            fav = await self.get_favorite_meme_url(user_id, emotion)
-            if fav:
-                return fav
-
-        # ── 回退到外部 API ──
-        category = _cfg.get(emotion)
-        if not category:
-            logger.warning(f"MemeService: 未知情绪分类 '{emotion}'，回退到 teasing")
-            category = _cfg.get("teasing", {})
-
-        api_url = category.get("api_url", "")
-        if not api_url:
+            logger.warning(f"MemeService: 下载异常 url={url[:60]} error={exc}")
             return None
-
-        remote_url = await self._fetch_remote_url(api_url)
-        if not remote_url:
-            return None
-
-        logger.info(f"MemeService: emotion={emotion} 远程URL={remote_url[:80]}")
-
-        filename = self._cache_filename(remote_url)
-        filepath = _CACHE_DIR / filename
-
-        if filepath.is_file():
-            local_url = f"{_LOCAL_BASE}/{filename}"
-            logger.info(f"MemeService: 命中缓存 → {local_url}")
-            return {"url": local_url, "type": "image", "data": None}
-
-        success = await self._download_image(remote_url, filepath)
-        if not success:
-            return None
-
-        local_url = f"{_LOCAL_BASE}/{filename}"
-        logger.info(f"MemeService: 下载成功 → {local_url}")
-        return {"url": local_url, "type": "image", "data": None}
 
     async def _fetch_remote_url(self, api_url: str) -> str | None:
         """从斗图 API 拉取远程图片 URL。"""
@@ -343,47 +223,28 @@ class MemeService:
             logger.warning(f"MemeService: API请求失败 api={api_url} error={exc}")
         return None
 
-    async def _download_image(self, remote_url: str, filepath: Path) -> bool:
-        """下载远程图片到本地文件。"""
-        _ensure_cache_dir()
-        try:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(15.0),
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(remote_url)
-                if resp.status_code == 200:
-                    filepath.write_bytes(resp.content)
-                    logger.info(
-                        f"MemeService: 下载成功 "
-                        f"size={len(resp.content)}bytes "
-                        f"file={filepath.name}"
-                    )
-                    return True
-                else:
-                    logger.warning(
-                        f"MemeService: 下载失败 HTTP={resp.status_code} url={remote_url[:60]}"
-                    )
-        except Exception as exc:
-            logger.warning(f"MemeService: 下载失败 url={remote_url[:60]} error={exc}")
-        return False
-
     @staticmethod
-    def _cache_filename(url: str) -> str:
-        """根据 URL 生成缓存文件名：md5(url) + 原始扩展名。"""
-        url_hash = hashlib.md5(url.encode()).hexdigest()
-        ext = "gif"
+    def _guess_ext(url: str, content: bytes) -> str:
+        """根据 URL 或文件头推断扩展名。"""
         path_part = url.split("?")[0]
         last_seg = path_part.rstrip("/").rsplit("/", 1)[-1]
         if "." in last_seg:
             raw_ext = last_seg.rsplit(".", 1)[-1].lower()
             if raw_ext in {"jpg", "jpeg", "png", "gif", "webp"}:
-                ext = raw_ext
-        return f"{url_hash}.{ext}"
+                return raw_ext
+        if content[:4] == b"\x89PNG":
+            return "png"
+        if content[:3] == b"GIF":
+            return "gif"
+        if content[:2] == b"\xff\xd8":
+            return "jpg"
+        if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+            return "webp"
+        return "gif"
 
     @staticmethod
     def classify_emotion(mood_state: dict[str, int]) -> str:
-        """根据情绪状态返回合适的分类标签。"""
+        """根据情绪状态返回分类标签。"""
         mood = mood_state.get("mood", 50)
         energy = mood_state.get("energy", 50)
         if mood > 80:
@@ -395,3 +256,36 @@ class MemeService:
         if energy < 25:
             return "angry"
         return "teasing"
+
+    # ═══════════════════════════════════════════
+    #  兼容旧接口（逐步废弃）
+    # ═══════════════════════════════════════════
+
+    async def get_favorite_meme_url(
+        self, user_id: str, emotion: str | None = None
+    ) -> dict[str, Any] | None:
+        """兼容旧接口：返回 None（已废弃本地收藏库）。"""
+        logger.warning("MemeService: get_favorite_meme_url 已废弃，请使用 get_meme_url")
+        return None
+
+    async def save_favorite_meme(
+        self,
+        user_id: str,
+        source: str,
+        emotion: str = "default",
+        tags: str = "",
+        is_url: bool = False,
+        meme_type: str = "image",
+    ) -> bool:
+        """兼容旧接口：已废弃本地数据库存储。"""
+        logger.warning("MemeService: save_favorite_meme 已废弃本地数据库存储")
+        return False
+
+    def convert_mface_to_image(
+        self, mface_data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """将 mface 数据转换为 image 类型。"""
+        url = mface_data.get("url") or mface_data.get("emoji_url") or ""
+        if url:
+            return {"url": url, "type": "image", "data": None}
+        return None

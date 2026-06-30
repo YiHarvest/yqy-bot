@@ -1,27 +1,11 @@
 """反思系统：让 YHarvest 从聊天中提炼自己的观察和判断。
-所有参数从 config/reflection.json 加载。
+配置已合并到 config_service.py。
 """
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
+from .config_service import MAX_RECENT_REFLECTIONS
 from .db import get_connection
-
-_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "reflection.json"
-
-
-def _load() -> dict:
-    if _CONFIG_PATH.is_file():
-        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-    return {}
-
-
-_cfg = _load()
-
-MAX_REFLECTIONS_PER_DAY: int = int(_cfg.get("max_reflections_per_day", 3))
-MAX_RECENT_REFLECTIONS: int = int(_cfg.get("max_recent_reflections", 10))
 
 
 class ReflectionService:
