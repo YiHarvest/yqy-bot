@@ -6,6 +6,7 @@
   _face_segment(face_id) → {"type": "face", "data": {"id": face_id}}
   _text_segment(text)    → {"type": "text", "data": {"text": text}}
   _reply_segment(msg_id) → {"type": "reply", "data": {"id": msg_id}}
+  _at_segment(qq)        → {"type": "at", "data": {"qq": qq}}
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from typing import Any
 from loguru import logger
 
 from .config_service import get_human_behavior_config
+from .napcat_api import NapCatAPI
 
 _cfg = get_human_behavior_config()
 
@@ -61,6 +63,11 @@ def _text_segment(text: str) -> dict[str, Any]:
 def _reply_segment(message_id: int | str) -> dict[str, Any]:
     """创建 OneBot11 reply（引用回复）消息段。"""
     return {"type": "reply", "data": {"id": str(message_id)}}
+
+
+def _at_segment(user_id: int | str) -> dict[str, Any]:
+    """创建 OneBot11 at 消息段。"""
+    return {"type": "at", "data": {"qq": str(user_id)}}
 
 
 def _mface_from_dict(data: dict[str, Any]) -> dict[str, Any]:
@@ -139,6 +146,7 @@ class TypingBehaviorService:
         face_id: str = "",
         event_message: Any = None,
         target: dict[str, str] | None = None,
+        at_user_id: str | None = None,
     ) -> None:
         """模拟真人发送消息。支持私聊和群聊。
 
@@ -150,8 +158,9 @@ class TypingBehaviorService:
             meme_mface_data: mface 数据
             face_id: QQ 表情 ID
             event_message: 原始消息（用于引用回复）
-            target: 发送目标，如 {"user_id": "xxx"} 或 {"group_id": "xxx"}
+        target: 发送目标，如 {"user_id": "xxx"} 或 {"group_id": "xxx"}
                    如果为 None，默认使用 {"user_id": user_id}（私聊）
+        at_user_id: 群聊中需要 @ 的目标 QQ 号；仅在 target 为 group 时生效
 
         - 随机打字延迟 1~6 秒
         - 30% 概率引用上一条消息
@@ -168,15 +177,27 @@ class TypingBehaviorService:
         if target is None:
             target = {"user_id": user_id}
 
+        api = adapter if isinstance(adapter, NapCatAPI) else NapCatAPI.from_adapter(adapter)
+
         # ── 3. 引用回复（30% 概率）──
         use_quote = random.random() < QUOTE_REPLY_PROB
         quote_id: str | None = None
+        logger.info(f"[真人发送] 引用检查: use_quote={use_quote} event_message={event_message is not None}")
         if use_quote and event_message is not None:
             try:
-                quote_id = str(event_message.message_id)
-                logger.debug(f"[真人发送] 引用回复: user={user_id} msg_id={quote_id}")
-            except Exception:
-                pass
+                msg_id = getattr(event_message, "message_id", None)
+                if msg_id is None:
+                    # 尝试从 raw 数据获取
+                    raw = getattr(event_message, "raw", None) or getattr(event_message, "payload", None)
+                    if raw and isinstance(raw, dict):
+                        msg_id = raw.get("message_id") or raw.get("msg_id")
+                if msg_id:
+                    quote_id = str(msg_id)
+                    logger.info(f"[真人发送] 引用回复: msg_id={quote_id}")
+                else:
+                    logger.warning(f"[真人发送] 无法获取 message_id: event_message={type(event_message).__name__}")
+            except Exception as e:
+                logger.warning(f"[真人发送] 获取 message_id 失败: {e}")
 
         # ── 3. 日志：发送概要 ──
         logger.info(
@@ -216,6 +237,8 @@ class TypingBehaviorService:
             if i == 0:
                 if quote_id:
                     segments.append(_reply_segment(quote_id))
+                if at_user_id and "group_id" in target:
+                    segments.append(_at_segment(at_user_id))
                 if meme_url:
                     segments.append(_image_segment(meme_url))
                 if meme_mface_data:
@@ -241,10 +264,7 @@ class TypingBehaviorService:
 
             msg = Message(segments)
             try:
-                await adapter.send_message(
-                    msg,
-                    target=target,
-                )
+                await api.send_safe_message(target, msg)
                 # 根据目标类型生成日志
                 target_type = "group_id" if "group_id" in target else "user_id"
                 target_id = target.get(target_type, user_id)
@@ -278,6 +298,7 @@ async def send_human_like(
     face_id: str = "",
     event_message: Any = None,
     target: dict[str, str] | None = None,
+    at_user_id: str | None = None,
 ) -> None:
     """向后兼容的模块级函数，委托给 TypingBehaviorService。"""
     await _typing_service.send_human_like(
@@ -289,4 +310,5 @@ async def send_human_like(
         face_id=face_id,
         event_message=event_message,
         target=target,
+        at_user_id=at_user_id,
     )

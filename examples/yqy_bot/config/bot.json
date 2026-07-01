@@ -6,8 +6,9 @@
   "meme_delete_keywords": ["删表情", "删除表情", "删收藏", "删除收藏"],
   "group_reply": {
     "enabled": true,
+    "blocked_group_ids": ["751476984"],
     "base_probability": 0.15,
-    "cooldown_seconds": 60,
+    "cooldown_seconds": 10,
     "trigger_keywords": ["YHarvest", "yqy", "YQY"],
     "context_aware_enabled": true,
     "max_replies_per_minute": 3

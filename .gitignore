@@ -79,3 +79,6 @@ examples/yqy_bot/data/memes/cache/
 examples/yqy_bot/data/**/*.db
 examples/yqy_bot/data/**/*.sqlite
 examples/yqy_bot/data/**/*.jsonl
+
+# documentation (local only)
+examples/yqy_bot/doc/

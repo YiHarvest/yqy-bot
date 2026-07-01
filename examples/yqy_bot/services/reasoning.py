@@ -24,13 +24,13 @@ class RelationshipReasoningService:
 
         限制：每日最多 MAX_REFLECTIONS_PER_DAY 条（复用反思配额）。
         """
-        today_count = self._reflection.count_today()
+        today_count = self._reflection.count_today(user_id)
         if today_count >= MAX_REFLECTIONS_PER_DAY:
             logger.debug(f"推理：今日配额已满({MAX_REFLECTIONS_PER_DAY})，跳过")
             return
 
         memories = self._memory.get_memories(user_id, limit=20)
-        recent_reflections = self._reflection.get_recent(limit=5)
+        recent_reflections = self._reflection.get_recent(user_id, limit=5)
 
         if len(memories) < 3:
             logger.debug("推理：长期记忆不足3条，跳过")

@@ -71,9 +71,8 @@ class ConversationStarterService:
                 "",
                 "## 生成规则",
                 "- 必须结合上面的记忆/观察/聊天记录，说一句自然的话",
-                "- 像真人朋友突然想到什么，随口问一句或吐槽一句",
                 "- 只返回这一句话，不要加任何前缀或解释",
-                "- 一句话不超过 20 字",
+                "- 一句话不超过 20 字，不要使用6或者笑死",
                 "",
                 "## 事实约束（重要）",
                 "- 禁止编造不存在的过去经历、虚构事件",
@@ -132,9 +131,9 @@ class ConversationStarterService:
     @staticmethod
     def _persona_hint(identity: str) -> str:
         if identity == "yqy":
-            return "风格：可以吐槽玩梗、阴阳怪气，像老朋友一样随意。"
+            return "风格：可以吐槽玩梗、阴阳怪气，随意。"
         if identity == "妹妹":
-            return "风格：温和关心，像个靠谱的哥哥，少攻击性。"
+            return "风格：毒舌。"
         return "风格：普通朋友聊天。"
 
 

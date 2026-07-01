@@ -136,6 +136,9 @@ _GROUP_REPLY_CONFIG = BOT_CONFIG.get("group_reply", {})
 GROUP_REPLY_ENABLED: bool = _GROUP_REPLY_CONFIG.get("enabled", True)
 GROUP_REPLY_BASE_PROBABILITY: float = float(_GROUP_REPLY_CONFIG.get("base_probability", 0.15))
 GROUP_REPLY_COOLDOWN_SECONDS: int = int(_GROUP_REPLY_CONFIG.get("cooldown_seconds", 60))
+GROUP_REPLY_BLOCKED_GROUP_IDS: frozenset[str] = frozenset(
+    str(group_id) for group_id in _GROUP_REPLY_CONFIG.get("blocked_group_ids", [])
+)
 GROUP_REPLY_TRIGGER_KEYWORDS: tuple[str, ...] = tuple(
     _GROUP_REPLY_CONFIG.get("trigger_keywords", ["小瑶", "瑶瑶", "yqy", "YQY"])
 )
@@ -214,7 +217,7 @@ BASE_SARCASM: int = int(_persona_base.get("sarcasm", 5))
 BASE_GENTLENESS: int = int(_persona_base.get("gentleness", 5))
 BASE_MAX_CHARS: int = int(_persona_base.get("max_reply_chars", 120))
 
-CATCHPHRASES: list[str] = _PERSONA_CONFIG.get("catchphrases", [])
+BANNED_CATCHPHRASES: list[str] = _PERSONA_CONFIG.get("banned_catchphrases", [])
 LIKED_EXPRESSIONS: list[str] = _PERSONA_CONFIG.get("liked_expressions", [])
 DISLIKED_EXPRESSIONS: list[str] = _PERSONA_CONFIG.get("disliked_expressions", [])
 

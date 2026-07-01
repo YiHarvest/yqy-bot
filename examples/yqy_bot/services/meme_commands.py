@@ -14,6 +14,7 @@ from iamai import Message
 from loguru import logger
 
 from .config_service import MEME_SAVE_KEYWORDS, MEME_SEND_KEYWORDS
+from .napcat_api import NapCatAPI
 from .human_behavior import _image_segment
 
 if TYPE_CHECKING:
@@ -63,15 +64,16 @@ class MemeCommandHandler:
             return False
 
         adapter: "Adapter" = adapters[0]
+        api = NapCatAPI.from_adapter(adapter)
 
         # ── 测试指令：随机发一张 QQ 收藏表情 ──
         if any(kw in text for kw in MEME_SEND_KEYWORDS):
-            await self._send_random_qq_favorite(ctx, adapter, user_id, reply_target)
+            await self._send_random_qq_favorite(ctx, api, user_id, reply_target)
             return True
 
         # ── 删除表情指令 ──
         if text.startswith("删表情 ") or text == "删表情":
-            await self._handle_delete_command(ctx, adapter, user_id, text, reply_target)
+            await self._handle_delete_command(ctx, api, user_id, text, reply_target)
             return True
 
         # ── 「存表情」指令：进入等待模式 ──
@@ -103,7 +105,7 @@ class MemeCommandHandler:
                 img_url, seg_type = img_result
 
                 # 调用 NapCat API 保存
-                success = await self._meme_service.save_from_url(adapter, img_url)
+                success = await self._meme_service.save_from_url(api, img_url)
                 if success:
                     await self._send_text_reply(
                         ctx, user_id, "存好了，在 QQ 收藏表情里能看到。", reply_target
@@ -126,12 +128,12 @@ class MemeCommandHandler:
     async def _send_random_qq_favorite(
         self,
         ctx: "Context",
-        adapter: "Adapter",
+        api: "NapCatAPI",
         user_id: str,
         reply_target: dict[str, str],
     ) -> None:
         """从 QQ 收藏表情库随机发一张。"""
-        urls = await self._meme_service.get_qq_favorites(adapter, count=48)
+        urls = await self._meme_service.get_qq_favorites(api, count=48)
         if not urls:
             await self._send_text_reply(
                 ctx, user_id, "QQ 收藏表情里还没有表情，先存几张。", reply_target
@@ -143,20 +145,20 @@ class MemeCommandHandler:
         url = random.choice(urls)
         segment = _image_segment(url)
         msg = Message([segment])
-        await adapter.send_message(msg, target=reply_target)
+        await api.send_safe_message(reply_target, msg)
         logger.info(f"[测试指令] 发送QQ收藏表情 → {user_id}")
 
     async def _handle_delete_command(
         self,
         ctx: "Context",
-        adapter: "Adapter",
+        api: "NapCatAPI",
         user_id: str,
         text: str,
         reply_target: dict[str, str],
     ) -> None:
         """处理删除表情指令。"""
         # 获取收藏表情详情
-        records = await self._meme_service.get_qq_favorites_detail(adapter, count=48)
+        records = await self._meme_service.get_qq_favorites_detail(api, count=48)
         if not records:
             await self._send_text_reply(
                 ctx, user_id, "QQ 收藏表情里没有可删除的表情。", reply_target
@@ -180,7 +182,7 @@ class MemeCommandHandler:
             if 0 <= index < len(records):
                 res_id = records[index].get("resId") or records[index].get("id") or ""
                 if res_id:
-                    success = await self._meme_service.delete_from_qq(adapter, res_id)
+                    success = await self._meme_service.delete_from_qq(api, res_id)
                     if success:
                         await self._send_text_reply(
                             ctx,
@@ -219,9 +221,9 @@ class MemeCommandHandler:
         if not adapters:
             return
 
-        adapter: "Adapter" = adapters[0]
+        api = NapCatAPI.from_adapter(adapters[0])
         msg = Message([{"type": "text", "data": {"text": text}}])
-        await adapter.send_message(msg, target=reply_target)
+        await api.send_safe_message(reply_target, msg)
         logger.info(f"[指令回复] → {user_id} text={text[:40]}")
 
     @staticmethod

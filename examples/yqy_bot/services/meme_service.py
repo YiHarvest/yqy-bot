@@ -18,6 +18,7 @@ import httpx
 from loguru import logger
 
 from .config_service import get_memes_config, DATA_DIR
+from .napcat_api import NapCatAPI
 
 if TYPE_CHECKING:
     from iamai.adapter import Adapter
@@ -37,10 +38,15 @@ class MemeService:
     #  NapCat API：QQ 客户端本地表情库
     # ═══════════════════════════════════════════
 
-    async def get_qq_favorites(self, adapter: "Adapter", count: int = 48) -> list[str]:
+    @staticmethod
+    def _api(adapter: "Adapter" | NapCatAPI) -> NapCatAPI:
+        return adapter if isinstance(adapter, NapCatAPI) else NapCatAPI.from_adapter(adapter)
+
+    async def get_qq_favorites(self, adapter: "Adapter" | NapCatAPI, count: int = 48) -> list[str]:
         """获取 QQ 客户端收藏表情 URL 列表。"""
         try:
-            result = await adapter.call_api("fetch_custom_face", count=count)
+            api = self._api(adapter)
+            result = await api.fetch_custom_face(count=count)
             if result.get("status") == "ok":
                 urls = result.get("data", [])
                 logger.info(f"MemeService: QQ收藏表情获取成功 count={len(urls)}")
@@ -52,11 +58,12 @@ class MemeService:
             return []
 
     async def get_qq_favorites_detail(
-        self, adapter: "Adapter", count: int = 48
+        self, adapter: "Adapter" | NapCatAPI, count: int = 48
     ) -> list[dict[str, Any]]:
         """获取 QQ 客户端收藏表情详细信息（含 resId）。"""
         try:
-            result = await adapter.call_api("fetch_custom_face_detail", count=count)
+            api = self._api(adapter)
+            result = await api.fetch_custom_face_detail(count=count)
             if result.get("status") == "ok":
                 data = result.get("data", {})
                 if isinstance(data, dict):
@@ -74,7 +81,7 @@ class MemeService:
             return []
 
     async def add_to_qq(
-        self, adapter: "Adapter", file_path: str | Path, is_origin: bool = True
+        self, adapter: "Adapter" | NapCatAPI, file_path: str | Path, is_origin: bool = True
     ) -> bool:
         """将表情添加到 QQ 客户端本地表情库。"""
         fp = Path(file_path)
@@ -83,11 +90,8 @@ class MemeService:
             return False
 
         try:
-            result = await adapter.call_api(
-                "add_custom_face",
-                file=str(fp),
-                is_origin=is_origin,
-            )
+            api = self._api(adapter)
+            result = await api.add_custom_face(str(fp), is_origin=is_origin)
             if result.get("status") == "ok":
                 logger.info(f"MemeService: QQ本地表情添加成功 file={fp}")
                 return True
@@ -97,10 +101,11 @@ class MemeService:
             logger.warning(f"MemeService: add_custom_face 异常 error={exc}")
             return False
 
-    async def delete_from_qq(self, adapter: "Adapter", res_id: str | list[str]) -> bool:
+    async def delete_from_qq(self, adapter: "Adapter" | NapCatAPI, res_id: str | list[str]) -> bool:
         """从 QQ 客户端删除收藏表情。"""
         try:
-            result = await adapter.call_api("delete_custom_face", res_id=res_id)
+            api = self._api(adapter)
+            result = await api.delete_custom_face(res_id)
             if result.get("status") == "ok":
                 logger.info(f"MemeService: QQ本地表情删除成功 res_id={res_id}")
                 return True
@@ -116,7 +121,7 @@ class MemeService:
 
     async def get_meme_url(
         self,
-        adapter: "Adapter",
+        adapter: "Adapter" | NapCatAPI,
         emotion: str | None = None,
         user_id: str | None = None,
     ) -> dict[str, Any] | None:

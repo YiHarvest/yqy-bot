@@ -228,14 +228,14 @@ def get_fallback_reply() -> dict[str, Any]:
 # ═══════════════════════════════════════════
 
 
-def parse_result(result: dict[str, Any] | list[Any]) -> tuple[str, str, bool]:
+def parse_result(result: dict[str, Any] | list[Any]) -> tuple[str, str, bool, str]:
     """解析 LLM 返回的结果。
 
     Args:
         result: LLM 返回的结果（dict 或 list）
 
     Returns:
-        (text, face_id, send_meme) 三元组
+        (text, face_id, send_meme, at_user_id) 四元组
     """
     text = ""
     face_id = ""
@@ -251,5 +251,6 @@ def parse_result(result: dict[str, Any] | list[Any]) -> tuple[str, str, bool]:
     raw_face = str(src.get("face_id", ""))
     face_id = raw_face.strip() if raw_face.strip().isdigit() else ""
     send_meme = bool(src.get("send_meme", False))
+    at_user_id = str(src.get("at_user_id", "")).strip()
 
-    return text, face_id, send_meme
+    return text, face_id, send_meme, at_user_id

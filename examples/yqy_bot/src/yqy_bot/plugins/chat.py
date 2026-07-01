@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import time
@@ -27,6 +28,7 @@ from loguru import logger
 # 配置服务
 from services.config_service import (
     GROUP_REPLY_BASE_PROBABILITY,
+    GROUP_REPLY_BLOCKED_GROUP_IDS,
     GROUP_REPLY_COOLDOWN_SECONDS,
     GROUP_REPLY_ENABLED,
     GROUP_REPLY_MAX_PER_MINUTE,
@@ -84,8 +86,10 @@ from services.meme_service import MemeService
 from services.persona import PersonaService
 from services.reflection import ReflectionService
 from services.social_memory import SocialMemoryService
+from services.conversation_intelligence import ConversationIntelligenceService
 from services.behavior import BehaviorService
 from services.reasoning import RelationshipReasoningService
+from services.napcat_api import NapCatAPI
 
 # 辅助模块（从 config_service 导入）
 from services.config_service import MIN_TEXT_LENGTH, QUESTION_MARKS, SKIP_KEYWORDS
@@ -141,6 +145,42 @@ def _log_reply(text: str, face_id: str, send_meme: bool, meme_url: str | None) -
     logger.info(f"AI回复: {label}")
 
 
+def _log_event_snapshot(event: Event) -> None:
+    """打印事件原始数据的一层结构，便于排查 NapCat 消息格式。"""
+    raw = getattr(event, "raw", None) or {}
+    payload = getattr(event, "payload", None) or {}
+
+    def _shape_one_level(value: Any) -> dict[str, str] | list[str] | str:
+        if isinstance(value, dict):
+            return {
+                str(key): type(val).__name__
+                if val is not None
+                else "NoneType"
+                for key, val in value.items()
+            }
+        if isinstance(value, list):
+            return [type(item).__name__ for item in value[:10]]
+        return []
+
+    logger.info(
+        "event snapshot: "
+        f"raw={_shape_one_level(raw)} "
+        f"payload={_shape_one_level(payload)} "
+        f"raw_type={type(raw).__name__} "
+        f"payload_type={type(payload).__name__}"
+    )
+
+
+def _log_task_exception(task: asyncio.Task[Any]) -> None:
+    """记录后台任务异常，避免未观察异常泄漏。"""
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        return
+    except Exception:
+        logger.exception("后台摘要/画像任务失败")
+
+
 class YqyChatPlugin(Plugin):
     """YQY 聊天机器人插件。"""
 
@@ -160,6 +200,7 @@ class YqyChatPlugin(Plugin):
         self._persona = PersonaService()
         self._reflection = ReflectionService()
         self._social = SocialMemoryService()
+        self._intelligence = ConversationIntelligenceService()
         self._reasoning = RelationshipReasoningService()
         self._prompt_builder: PromptBuilder | None = None
         self._meme_handler: MemeCommandHandler | None = None
@@ -180,6 +221,7 @@ class YqyChatPlugin(Plugin):
             memory_service=self._memory,
             reflection_service=self._reflection,
             social_memory_service=self._social,
+            intelligence_service=self._intelligence,
         )
         self._meme_handler = MemeCommandHandler(self._meme)
         self._initialized = True
@@ -300,11 +342,12 @@ class YqyChatPlugin(Plugin):
 
     def _should_handle_event(self, event: Event) -> bool:
         """判断是否应处理该事件。"""
-        # 私聊：谁主动找它，它都可以回复
-        if not self._is_group_event(event):
-            return True
-        # 群聊：智能判断是否回复
-        return self._should_reply_group_message(event)
+        if self._is_group_event(event):
+            group_id = self._group_id(event)
+            if group_id in GROUP_REPLY_BLOCKED_GROUP_IDS:
+                logger.info(f"群聊已禁用自动聊天: group_id={group_id}")
+                return False
+        return True
 
     def _should_record_source_for_active_chat(self, event: Event) -> bool:
         """判断是否应记录主动聊天源。"""
@@ -312,6 +355,25 @@ class YqyChatPlugin(Plugin):
             return False
         user_id = str(getattr(event, "user_id", "") or "")
         return user_id in self._proactive_users()
+
+    def _schedule_context_refresh(
+        self, session_id: str, user_message: str, assistant_message: str = ""
+    ) -> None:
+        """把摘要/画像更新放到后台，不阻塞主回复。"""
+        try:
+            task = asyncio.create_task(
+                self._intelligence.refresh_context(
+                    session_id,
+                    user_message=user_message,
+                    assistant_message=assistant_message,
+                )
+            )
+            task.add_done_callback(_log_task_exception)
+        except RuntimeError:
+            logger.debug(
+                f"摘要/画像任务未能调度: session={session_id} "
+                f"user_message={user_message[:40]!r}"
+            )
 
     def _reply_target(self, ctx: Context, user_id: str) -> dict:
         """确定回复目标。"""
@@ -405,17 +467,43 @@ class YqyChatPlugin(Plugin):
         except Exception:
             return {"save": False}
 
+    async def _extract_and_store_memory(self, user_id: str, user_raw: str) -> None:
+        """无论是否回复，都尝试抽取长期记忆与社交记忆。"""
+        if not user_raw or user_raw == "对方发了一张图片/表情包过来":
+            return
+        if not _should_extract_memory(user_raw):
+            return
+
+        memory = await self._extract_memory(user_raw)
+        if not (memory.get("save") and memory.get("memory")):
+            return
+
+        self._memory.save_memory(
+            user_id, memory["memory"], importance=memory.get("importance", 0.5)
+        )
+        logger.info(f"记忆保存: {memory['memory'][:40]}")
+
+        social = await self._extract_social_memory(user_raw)
+        if social.get("save") and social.get("content"):
+            self._social.save_social_memory(
+                subject_user=user_id,
+                target_user=str(social.get("target_user", "某人")),
+                relation=str(social.get("relation", "观察")),
+                content=str(social["content"]),
+                importance=float(social.get("importance", 0.5)),
+            )
+
     # ═══════════════════════════════════════════
     #  反思生成
     # ═══════════════════════════════════════════
 
     async def _generate_reflection(self, user_id: str) -> None:
         """触发反思。"""
-        if self._reflection.count_today() >= MAX_REFLECTIONS_PER_DAY:
+        if self._reflection.count_today(user_id) >= MAX_REFLECTIONS_PER_DAY:
             return
 
         memories = self._memory.get_memories(user_id)
-        history = self._history.get_recent_history(user_id, MAX_HISTORY_TURNS)
+        history = self._history.get_recent_history_for_user(user_id, MAX_HISTORY_TURNS)
         rel = self._relation.get_or_create_user(user_id)
 
         memory_text = "\n".join(f"- {m}" for m in memories) or "（暂无长期记忆）"
@@ -441,9 +529,11 @@ class YqyChatPlugin(Plugin):
             )
             if result.get("save") and result.get("reflection"):
                 self._reflection.save_reflection(
-                    str(result["reflection"]), float(result.get("importance", 0.5))
+                    user_id,
+                    str(result["reflection"]),
+                    float(result.get("importance", 0.5)),
                 )
-                logger.info(f"反思保存: {result['reflection'][:60]}")
+                logger.info(f"反思保存: user={user_id} {result['reflection'][:60]}")
         except Exception:
             logger.warning("反思生成失败")
 
@@ -489,6 +579,7 @@ class YqyChatPlugin(Plugin):
     @message_handler(priority=90)
     async def free_chat(self, ctx: Context, event: Event) -> None:
         """主聊天处理。"""
+        _log_event_snapshot(event)
         if not self._should_handle_event(event):
             return
         if ctx.shared_state.get("meme_handled"):
@@ -500,11 +591,22 @@ class YqyChatPlugin(Plugin):
         segments = event.message.segments
         text = ctx.text.strip()
         has_media = any(_is_media_segment(s) for s in segments)
+        logger.info(
+            "free_chat入口: "
+            f"ctx_text={ctx.text!r} stripped={text!r} "
+            f"segments_count={len(segments)} has_media={has_media} "
+            f"segment_types={[getattr(seg, 'type', None) if not isinstance(seg, dict) else seg.get('type') for seg in segments]}"
+        )
 
         if has_media and not text:
             user_msg = "对方发了一张图片/表情包过来"
             self._meme_streak += 1
         elif not text or text.startswith("/"):
+            logger.info(
+                "free_chat早退: "
+                f"text={text!r} has_media={has_media} "
+                f"raw_text={getattr(event, 'text', None)!r}"
+            )
             return
         else:
             user_msg = text
@@ -514,36 +616,86 @@ class YqyChatPlugin(Plugin):
 
         # session_id 区分聊天会话：私聊用 user_id，群聊用 group_id:user_id
         session_id = self._get_session_id(event)
+        group_id = self._group_id(event) if self._is_group_event(event) else ""
         # user_id 始终是实际发送者（群聊时从 session_id 提取）
         user_id = event.user_id or (
             session_id.split(":")[-1] if ":" in session_id else "default"
         )
 
+        self._history.append_message(
+            session_id,
+            "user",
+            user_msg,
+            group_id=group_id,
+            user_id=user_id,
+        )
         self._relation.get_or_create_user(user_id)
         self._relation.update_last_chat_time(user_id)
         self._adjust_relation_from_text(text, user_id)
 
+        # 无论后面回不回复，都先尝试抽取记忆
+        await self._extract_and_store_memory(user_id, user_msg)
+
+        intent = await self._intelligence.should_reply(
+            session_id,
+            user_msg,
+            is_group=self._is_group_event(event),
+            is_at_me=self._is_at_me_event(event),
+        )
+        logger.info(
+            f"[意图识别] 结果: reply={intent.get('reply')} "
+            f"reason={intent.get('reason', '')} "
+            f"confidence={intent.get('confidence', 0.0)}"
+        )
+        if not intent.get("reply", True):
+            logger.info(
+                f"意图识别不回复: user={user_id} "
+                f"reason={intent.get('reason', '')} "
+                f"confidence={intent.get('confidence', 0.0)}"
+            )
+            self._schedule_context_refresh(
+                session_id,
+                user_message=user_msg,
+                assistant_message="",
+            )
+            return
+
         result = await self._ai_reply(user_msg, session_id, user_id)
         # 确定回复目标（群聊发到 group_id，私聊发到 user_id）
         reply_target = self._reply_target(ctx, user_id)
-        await self._send_reply(ctx, result, session_id, user_id, reply_target)
+        await self._send_reply(
+            ctx,
+            result,
+            session_id,
+            user_id,
+            reply_target,
+            group_id=group_id,
+            user_msg=user_msg,
+        )
 
     async def _ai_reply(
         self, user_message: str, session_id: str, user_id: str
     ) -> dict[str, Any]:
         """调用 LLM 生成回复。"""
         config = LLMConfig.from_mapping()
-        system_prompt = self._prompt_builder.build(user_id)
+        system_prompt = self._prompt_builder.build(user_id, session_id=session_id)
         messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
-        messages.extend(self._history.get_recent_history(session_id, MAX_HISTORY_TURNS))
+        recent_history = self._history.get_recent_history(session_id, MAX_HISTORY_TURNS + 1)
+        if recent_history and recent_history[-1].get("role") == "user" and recent_history[-1].get("content") == user_message:
+            recent_history = recent_history[:-1]
+        messages.extend(recent_history)
         messages.append(
             {"role": "user", "content": build_user_message_with_time(user_message)}
         )
 
         try:
-            return await LLMClient(config).chat_json(messages)
-        except Exception:
+            result = await LLMClient(config).chat_json(messages)
+            logger.info(f"[AI回复] LLM返回原始结果: {result}")
+            return result
+        except Exception as e:
+            logger.warning(f"[AI回复] chat_json失败: {e}")
             text = await LLMClient(config).chat_text(messages)
+            logger.debug(f"LLM文本兜底返回: {text}")
             return {"text": text, "face_id": "", "send_meme": False}
 
     async def _send_reply(
@@ -553,6 +705,9 @@ class YqyChatPlugin(Plugin):
         session_id: str,
         user_id: str,
         reply_target: dict[str, str] | None = None,
+        *,
+        group_id: str = "",
+        user_msg: str = "",
     ) -> None:
         """发送回复（含毒性过滤、事实闸门、表情包处理）。
 
@@ -564,17 +719,25 @@ class YqyChatPlugin(Plugin):
             reply_target: 发送目标，如 {"user_id": "xxx"} 或 {"group_id": "xxx"}
                           如果为 None，会根据事件类型自动确定
         """
-        text, face_id, send_meme = parse_result(result)
+        text, face_id, send_meme, at_user_id = parse_result(result)
+        logger.info(
+            "[发送回复] 解析结果: "
+            f"text={text!r} face_id={face_id!r} "
+            f"send_meme={send_meme} at_user_id={at_user_id!r}"
+        )
+        if not text and not face_id and not send_meme:
+            logger.warning("[发送回复] 内容全部为空，可能不会发送消息")
 
         # 毒性过滤
         toxic_match = check_toxic(text)
         if toxic_match:
             logger.warning(f"毒性拦截: text={text[:50]} pattern={toxic_match}")
             fallback = get_toxic_fallback()
-            text, face_id, send_meme = (
+            text, face_id, send_meme, at_user_id = (
                 fallback["text"],
                 fallback.get("face_id", ""),
                 fallback.get("send_meme", False),
+                "",
             )
 
         # 事实闸门
@@ -595,12 +758,18 @@ class YqyChatPlugin(Plugin):
             if unsupported:
                 logger.warning(f"事实闸门拦截: unsupported={unsupported}")
                 rewritten = await rewrite_unsafe_reply(text, unsupported, user_raw)
-                text, face_id, send_meme = parse_result(rewritten)
+                text, face_id, send_meme, _ = parse_result(rewritten)
                 # 重写后再检查毒性
                 toxic2 = check_toxic(text)
                 if toxic2:
                     fallback = get_toxic_fallback()
                     text, face_id, send_meme = fallback["text"], "", False
+
+        logger.debug(
+            "发送前回复结果: "
+            f"text={text!r} face_id={face_id!r} "
+            f"send_meme={send_meme} at_user_id={at_user_id!r}"
+        )
 
         # 表情包反击
         if self._meme_streak >= 2:
@@ -621,9 +790,8 @@ class YqyChatPlugin(Plugin):
         if send_meme:
             adapters = getattr(self.runtime, "adapters", [])
             if adapters:
-                fav = await self._meme.get_meme_url(
-                    adapters[0], emotion, user_id=user_id
-                )
+                api = NapCatAPI.from_adapter(adapters[0])
+                fav = await self._meme.get_meme_url(api, emotion, user_id=user_id)
                 if fav:
                     meme_url = fav["url"]  # 现在统一返回 image 类型
 
@@ -635,21 +803,32 @@ class YqyChatPlugin(Plugin):
                 text = ""
 
         # 记录历史
+        assistant_message = text
+        if not assistant_message:
+            if meme_url or meme_mface_data or send_meme:
+                assistant_message = "[表情包]"
+            elif face_id:
+                assistant_message = f"[表情:{face_id}]"
         if text or face_id or meme_url or meme_mface_data:
             _log_reply(text, face_id, send_meme, meme_url or "[mface]")
-            self._history.append_turn(
-                session_id, user_raw or "[图片]", text or "[表情包]"
+            self._history.append_message(
+                session_id,
+                "assistant",
+                assistant_message or "[表情包]",
+                group_id=group_id,
+                user_id=user_id,
             )
 
         # 真人化发送
         adapters = getattr(self.runtime, "adapters", [])
         if adapters:
+            api = NapCatAPI.from_adapter(adapters[0])
             # 如果未指定 reply_target，根据事件类型自动确定
             if reply_target is None:
                 reply_target = self._reply_target(ctx, user_id)
 
             await _send_human(
-                adapter=adapters[0],
+                adapter=api,
                 user_id=user_id,
                 text=text,
                 meme_url=meme_url,
@@ -659,30 +838,14 @@ class YqyChatPlugin(Plugin):
                     ctx.event.message if hasattr(ctx.event, "message") else None
                 ),
                 target=reply_target,
+                at_user_id=at_user_id if reply_target and "group_id" in reply_target else None,
             )
 
-        # 记忆提取
-        if (
-            user_raw
-            and user_raw != "对方发了一张图片/表情包过来"
-            and _should_extract_memory(user_raw)
-        ):
-            memory = await self._extract_memory(user_raw)
-            if memory.get("save") and memory.get("memory"):
-                self._memory.save_memory(
-                    user_id, memory["memory"], importance=memory.get("importance", 0.5)
-                )
-                logger.info(f"记忆保存: {memory['memory'][:40]}")
-
-                social = await self._extract_social_memory(user_raw)
-                if social.get("save") and social.get("content"):
-                    self._social.save_social_memory(
-                        subject_user=user_id,
-                        target_user=str(social.get("target_user", "某人")),
-                        relation=str(social.get("relation", "观察")),
-                        content=str(social["content"]),
-                        importance=float(social.get("importance", 0.5)),
-                    )
+        self._schedule_context_refresh(
+            session_id,
+            user_message=user_msg or user_raw or "",
+            assistant_message=assistant_message,
+        )
 
         # 状态更新
         self._mood.adjust_energy(REPLY_ENERGY_DELTA)

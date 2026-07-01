@@ -14,6 +14,7 @@ from loguru import logger
 
 # 路径配置
 from services.config_service import PROJECT_ROOT
+from services.napcat_api import NapCatAPI
 
 # 主动行为配置
 from services.config_service import (
@@ -177,8 +178,8 @@ class ActiveLifePlugin(Plugin):
         self, user_id: str, target: dict[str, Any], memories: list[str]
     ) -> None:
         """使用 ActiveChatGenerator 生成并发送主动聊天消息。"""
-        reflections = self._reflection.get_recent()
-        history = self._history.get_recent_history(user_id, RECENT_HISTORY_TURNS)
+        reflections = self._reflection.get_recent(user_id)
+        history = self._history.get_recent_history_for_user(user_id, RECENT_HISTORY_TURNS)
         social_memories = self._social_mem.get_related_memories(user_id)
 
         text = await self._chat_gen.generate(
@@ -205,7 +206,7 @@ class ActiveLifePlugin(Plugin):
 
         state = self._mood.get_state()
         emotion = self._behavior.classify_emotion(state)
-        fav = await self._meme_service.get_meme_url(adapters[0], emotion)
+        fav = await self._meme_service.get_meme_url(NapCatAPI.from_adapter(adapters[0]), emotion)
         if not fav:
             return
         msg = Message()
@@ -228,9 +229,9 @@ class ActiveLifePlugin(Plugin):
         if not adapters:
             logger.warning("Active send: 没有可用适配器")
             return
-        adapter = adapters[0]
+        api = NapCatAPI.from_adapter(adapters[0])
         try:
-            await adapter.send_message(message, target={"user_id": user_id})
+            await api.send_safe_message({"user_id": user_id}, message)
             logger.info(f"Active send: → {user_id} type=msg")
         except Exception:
             logger.exception(f"Active send 失败: {user_id}")
@@ -242,7 +243,18 @@ class ActiveLifePlugin(Plugin):
             return None
         adapter = adapters[0]
         try:
-            return await adapter.call_api(action, **params)
+            api = NapCatAPI.from_adapter(adapter)
+            if action == "send_poke":
+                return await api.send_poke(str(params.get("user_id", "")))
+            return await api.call_api(action, **params)
         except Exception:
             logger.exception(f"Active call_api 失败: {action} {params}")
             return None
+
+    def _log_action(self, user_id: str, action: str) -> None:
+        """记录主动行为的落库状态。"""
+        try:
+            self._rel.update_last_active_time(user_id)
+            logger.info(f"Active log: user={user_id} action={action} last_active_time updated")
+        except Exception:
+            logger.exception(f"Active log 失败: user={user_id} action={action}")

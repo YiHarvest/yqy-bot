@@ -12,6 +12,20 @@ DB_PATH = DB_DIR / "chat.db"
 _write_lock = Lock()
 
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """返回表已有字段集合。"""
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {row[1] for row in rows}
+
+
+def _ensure_column(
+    conn: sqlite3.Connection, table: str, column: str, ddl: str
+) -> None:
+    """确保表中存在指定字段。"""
+    if column not in _table_columns(conn, table):
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 def get_db_path():
     """返回数据库文件路径，确保目录存在。"""
     from .config_service import DATA_DIR
@@ -35,16 +49,23 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS chat_history (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id  TEXT    NOT NULL,
+                group_id    TEXT    NOT NULL DEFAULT '',
+                user_id     TEXT    NOT NULL DEFAULT '',
                 role        TEXT    NOT NULL,
                 content     TEXT    NOT NULL,
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """)
+        _ensure_column(conn, "chat_history", "group_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(conn, "chat_history", "user_id", "TEXT NOT NULL DEFAULT ''")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_history_session ON chat_history(session_id)"
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_history_time ON chat_history(session_id, created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_history_scope ON chat_history(group_id, user_id)"
         )
         conn.execute("""
             CREATE TABLE IF NOT EXISTS memory (
@@ -85,11 +106,15 @@ def init_db() -> None:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS reflection (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     TEXT    NOT NULL DEFAULT '',
+                session_id  TEXT    NOT NULL DEFAULT '',
                 content     TEXT    NOT NULL,
                 importance  REAL    DEFAULT 0.5,
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """)
+        _ensure_column(conn, "reflection", "user_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(conn, "reflection", "session_id", "TEXT NOT NULL DEFAULT ''")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS social_memory (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,11 +126,46 @@ def init_db() -> None:
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_summary (
+                session_id      TEXT    PRIMARY KEY,
+                group_id        TEXT    NOT NULL DEFAULT '',
+                user_id         TEXT    NOT NULL DEFAULT '',
+                summary         TEXT    NOT NULL,
+                source_turns    INTEGER DEFAULT 0,
+                updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_profile (
+                session_id      TEXT    PRIMARY KEY,
+                group_id        TEXT    NOT NULL DEFAULT '',
+                user_id         TEXT    NOT NULL DEFAULT '',
+                nickname        TEXT    NOT NULL,
+                identity        TEXT    NOT NULL,
+                profile         TEXT    NOT NULL,
+                updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_social_subject ON social_memory(subject_user)"
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_social_target ON social_memory(target_user)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reflection_user ON reflection(user_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reflection_user_time ON reflection(user_id, created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_summary_scope ON chat_summary(group_id, user_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_profile_scope ON user_profile(group_id, user_id)"
         )
         conn.commit()
     finally:

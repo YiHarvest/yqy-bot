@@ -6,10 +6,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import TYPE_CHECKING, Any
 
 from .config_service import PROMPT_CONFIG
+
+# 北京时间 (UTC+8)
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 if TYPE_CHECKING:
     from .mood import MoodService
@@ -18,6 +21,7 @@ if TYPE_CHECKING:
     from .memory import MemoryService
     from .reflection import ReflectionService
     from .social_memory import SocialMemoryService
+    from .conversation_intelligence import ConversationIntelligenceService
 
 
 # 从配置中提取静态 prompt 字段
@@ -43,6 +47,7 @@ class PromptBuilder:
         memory_service: "MemoryService",
         reflection_service: "ReflectionService",
         social_memory_service: "SocialMemoryService",
+        intelligence_service: "ConversationIntelligenceService | None" = None,
     ) -> None:
         self._mood = mood_service
         self._relation = relation_service
@@ -50,19 +55,26 @@ class PromptBuilder:
         self._memory = memory_service
         self._reflection = reflection_service
         self._social = social_memory_service
+        self._intelligence = intelligence_service
 
-    def build(self, user_id: str) -> str:
+    def build(self, user_id: str, session_id: str | None = None) -> str:
         """构建完整的系统提示词。
 
         Args:
             user_id: 用户 ID
+            session_id: 会话 ID，用于注入最近 summary/profile
 
         Returns:
             完整的系统提示词文本
         """
         memories = self._memory.get_memories(user_id)
-        reflections = self._reflection.get_recent()
+        reflections = self._reflection.get_recent(user_id)
         social_desc = self._social.describe_user(user_id)
+        context = (
+            self._intelligence.get_context(session_id)
+            if self._intelligence and session_id
+            else {"summary": "", "profile": ""}
+        )
 
         parts: list[str] = []
 
@@ -87,29 +99,32 @@ class PromptBuilder:
         # 7. 社交记忆
         self._append_social(parts, social_desc)
 
-        # 8. 事实边界
+        # 8. 最近会话摘要与用户画像
+        self._append_conversation_context(parts, context)
+
+        # 9. 事实边界
         self._append_fact_boundary(parts)
 
-        # 9. 记忆使用规则
+        # 10. 记忆使用规则
         self._append_memory_rules(parts)
 
-        # 10. 反思使用规则
+        # 11. 反思使用规则
         self._append_reflection_rules(parts)
 
-        # 11. 说话风格
+        # 12. 说话风格
         self._append_speech_style(parts)
 
-        # 12. 示例对话
+        # 13. 示例对话
         self._append_examples(parts)
 
-        # 13. 输出格式
+        # 14. 输出格式
         self._append_output_schema(parts)
 
         return "\n".join(parts)
 
     def _append_time_section(self, parts: list[str]) -> None:
         """添加当前时间部分。"""
-        now = datetime.now()
+        now = datetime.now(BEIJING_TZ)
         time_str = now.strftime("%Y年%m月%d日 %H:%M")
         weekday = "一二三四五六日"[now.weekday()]
         parts.append(
@@ -164,12 +179,31 @@ class PromptBuilder:
             parts.append("## 人物关系记忆")
             parts.append(social_desc)
 
+    def _append_conversation_context(
+        self, parts: list[str], context: dict[str, str]
+    ) -> None:
+        """添加最近会话摘要和用户画像。"""
+        summary = context.get("summary", "").strip()
+        profile = context.get("profile", "").strip()
+        if not summary and not profile:
+            return
+
+        parts.append("")
+        parts.append("## 最近会话摘要与用户画像（来自数据库，优先参考）")
+        if summary:
+            parts.append("### 最近摘要")
+            parts.append(summary)
+        if profile:
+            parts.append("### 用户画像")
+            parts.append(profile)
+
     def _append_fact_boundary(self, parts: list[str]) -> None:
         """添加事实边界部分。"""
         parts.append("")
         parts.append("# 事实边界（最高优先级，必须遵守）")
         for line in _FACT_BOUNDARY:
             parts.append(line)
+        parts.append("不要主动泄露、总结或扩写用户的个人隐私、现实身份信息、联系方式、住址、行程或其他敏感信息。")
 
     def _append_memory_rules(self, parts: list[str]) -> None:
         """添加记忆使用规则部分。"""
@@ -191,6 +225,8 @@ class PromptBuilder:
         parts.append("## 说话风格（必须遵守）")
         for line in _SPEECH_STYLE:
             parts.append(f"- {line}")
+        parts.append("- 避免口头禅重复，不要频繁使用“6”或“笑死”这类固定表达。")
+        parts.append("- 始终用真人口吻聊天，不要自称 AI、机器人、助手或语言模型。")
 
     def _append_examples(self, parts: list[str]) -> None:
         """添加示例对话部分。"""
@@ -224,7 +260,7 @@ class PromptBuilder:
             parts.append(line)
 
         # 时间强调（末尾最强约束）
-        now = datetime.now()
+        now = datetime.now(BEIJING_TZ)
         weekday = "一二三四五六日"[now.weekday()]
         parts.append("")
         parts.append(
@@ -241,7 +277,7 @@ def build_user_message_with_time(user_message: str) -> str:
     Returns:
         带时间前缀的用户消息
     """
-    now = datetime.now()
+    now = datetime.now(BEIJING_TZ)
     weekday = "一二三四五六日"[now.weekday()]
     time_prefix = f"[当前真实时间：{now.strftime('%Y年%m月%d日 %H:%M')} 周{weekday}]\n"
     return time_prefix + user_message

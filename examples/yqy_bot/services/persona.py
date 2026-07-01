@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 
+import random
 
 from .config_service import (
     BASE_SARCASM,
     BASE_GENTLENESS,
     BASE_MAX_CHARS,
-    CATCHPHRASES,
+    BANNED_CATCHPHRASES,
     _persona_identities,
 )
 
@@ -41,10 +42,20 @@ class PersonaService:
         elif mood < 30:
             gentleness = max(1, gentleness - 2)
 
-        parts = [f"当前回复风格：讽刺度 {sarcasm}/10，温和度 {gentleness}/10"]
+        parts: list[str] = []
+
+        # 多样化模板：避免每次都用同一套固定文字
+        templates = [
+            f"当前回复风格：讽刺度 {sarcasm}/10，温和度 {gentleness}/10",
+            f"回复风格：讽刺 {sarcasm}/10，温和 {gentleness}/10，不超过 {max_chars} 字",
+            f"风格倾向：讽刺度{sarcasm}、温和度{gentleness}，回复控制在 {max_chars} 字内",
+        ]
+        parts.append(random.choice(templates))
         parts.append(f"单次回复不超过 {max_chars} 字")
 
-        if CATCHPHRASES:
-            parts.append(f"口头禅：{', '.join(CATCHPHRASES[:3])}")
+        # 禁止使用的口头禅（最高优先级约束）
+        if BANNED_CATCHPHRASES:
+            banned_str = ', '.join(BANNED_CATCHPHRASES[:5])
+            parts.append(f"禁止使用以下口头禅：{banned_str}。出现这些词的回复会被拦截重写。")
 
         return "\n".join(parts)

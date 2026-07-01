@@ -94,6 +94,7 @@ async def test_meme_url_format() -> bool:
 async def test_onebot_image_segment() -> bool:
     """验证 OneBot11 image 消息段格式。"""
     from services.human_behavior import (
+        _at_segment,
         _face_segment,
         _image_segment,
         _reply_segment,
@@ -112,6 +113,9 @@ async def test_onebot_image_segment() -> bool:
     # reply 段
     reply = _reply_segment(123)
     assert reply == {"type": "reply", "data": {"id": "123"}}, f"reply段错误: {reply}"
+    # at 段
+    at = _at_segment(456)
+    assert at == {"type": "at", "data": {"qq": "456"}}, f"at段错误: {at}"
 
     logger.info("OneBot11 消息段格式全部正确")
     return True
