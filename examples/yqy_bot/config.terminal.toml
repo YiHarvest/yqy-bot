@@ -3,18 +3,18 @@ log_level = "INFO"
 command_prefixes = ["/"]
 adapters = ["terminal"]
 plugin_dirs = ["src/yqy_bot/plugins"]
-python_paths = ["src", "services"]
-superusers = ["yqy"]
+python_paths = ["src"]
+superusers = ["10000"]
 
 [runtime.hot_reload]
 enabled = true
 interval = 1.0
 
 [adapter.terminal]
-prompt = "yqy> "
-output_prefix = "yqy-bot> "
-user_id = "yqy"
-self_id = "yqy-bot"
+prompt = "bot> "
+output_prefix = "bot> "
+user_id = "10000"
+self_id = "bot"
 
 [plugin.management]
 allow_reload = true

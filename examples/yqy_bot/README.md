@@ -1,205 +1,139 @@
-# YHarvest
+# YQY_BOT
 
-基于 [iamai](https://github.com/retrofor/iamai) + NapCatQQ 的 QQ 个人聊天机器人，接入 DeepSeek V4 Flash。
+基于 `iamai` + NapCatQQ 的 QQ 被动聊天机器人 MVP。
 
-## 快速开始
+## 目标
 
-### 1. 安装依赖
 
-```bash
-cd D:\jiaodian\iamai
-uv sync --package yqy-bot
-```
+`消息接入 -> MessageParser -> ReplyGate -> IntentRouter -> ContextBuilder -> PromptBuilder -> LLMRouter -> ResponseGenerator -> FactGuard/Safety -> QQSender`
 
-### 2. 配置环境变量
+后台只做慢速学习：
 
-在项目根目录创建 `.env` 文件：
+- 用户画像
+- 群聊画像
+- 摘要
+- 记忆
+- 反思
 
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_BASE_URL=https://api.deepseek.com
-OPENAI_MODEL=deepseek-chat
-```
+## 配置
 
-## Docker 部署（Linux）
+项目只保留 3 个 JSON 配置文件：
 
-如果你在 Linux 服务器上运行，推荐使用 Docker 部署，无需手动安装 NapCatQQ。
+- `config/bot.json`
+- `config/persona.json`
+- `config/safety.json`
 
-### 1. 配置环境变量
+## 环境变量
 
-在项目根目录创建 `.env` 文件：
+按角色分别配置：
 
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_BASE_URL=https://api.deepseek.com
-OPENAI_MODEL=deepseek-chat
+CHAT_OPENAI_BASE_URL=
+CHAT_OPENAI_API_KEY=
+CHAT_OPENAI_MODEL=
+
+INTENT_OPENAI_BASE_URL=
+INTENT_OPENAI_API_KEY=
+INTENT_OPENAI_MODEL=
+
+REASON_OPENAI_BASE_URL=
+REASON_OPENAI_API_KEY=
+REASON_OPENAI_MODEL=
+
+VISION_OPENAI_BASE_URL=
+VISION_OPENAI_API_KEY=
+VISION_OPENAI_MODEL=
+
+BACKGROUND_OPENAI_BASE_URL=
+BACKGROUND_OPENAI_API_KEY=
+BACKGROUND_OPENAI_MODEL=
+
+LONG_CONTEXT_OPENAI_BASE_URL=
+LONG_CONTEXT_OPENAI_API_KEY=
+LONG_CONTEXT_OPENAI_MODEL=
 ```
 
-### 2. 启动服务
+可选地放一个项目根目录 `.env`，`run.py` 会自动加载。
+
+## 运行
+
+终端模式：
 
 ```bash
-cd /home/yqy/Projects
-NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose up -d --no-build
-```
-
-### 3. 登录 QQ
-
-访问 http://127.0.0.1:6099/webui
-
-**需要重新登录吗？**
-
-不一定。访问 webui 后，如果已保留登录态就不用重新扫码。如果提示扫码或日志显示：
-
-```text
-请扫描下面的二维码，然后在手Q上授权登录
-```
-
-则需要重新扫码登录。
-
-NapCat 的数据挂载在：
-- `/home/yqy/Projects/napcat/qq`
-- `/home/yqy/Projects/napcat/config`
-
-正常重启容器后配置和登录数据会保留。但 QQ 登录态有时会失效，需要重新扫码。
-
-### 4. 查看日志
-
-查看机器人日志：
-
-```bash
-docker logs -f qqbot
-```
-
-查看 NapCat 日志：
-
-```bash
-docker logs -f napcat
-```
-
-查看最近 100 行：
-
-```bash
-docker logs --tail=100 qqbot
-docker logs --tail=100 napcat
-```
-
-### 5. 确认服务正常
-
-```bash
-cd /home/yqy/Projects
-docker compose ps
-```
-
-看到：
-
-```text
-napcat Up
-qqbot Up
-```
-
-然后给 QQ 发一句话，查看 `qqbot` 日志：
-
-```bash
-docker logs -f qqbot
-```
-
-如果有：
-
-```text
-onebot11/message text='你好'
-```
-
-说明消息已进入机器人，服务正常。
-
----
-
-## 手动部署（Windows）
-
-以下为 Windows 手动部署步骤。
-
-### 3. 启动 NapCatQQ
-
-QQ 私聊需要 NapCatQQ 作为 OneBot11 适配器。
-
-**① 找到 NapCat 安装目录**（通常在 `D:\LeStoreDownload\NapCat\`）：
-
-```powershell
-cd D:\LeStoreDownload\NapCat\NapCat.44498.Shell
-```
-
-**② 首次启动扫码登录**：
-
-```powershell
-.\NapCatWinBootMain.exe
-```
-
-> 会输出二维码链接，用手机 QQ 扫码登录。控制台乱码是编码问题，不影响使用。看到 `OneBot11 适配器初始化完成` 说明成功。
-
-**③ 确认反向 WebSocket 已就绪**，监听地址为 `ws://127.0.0.1:8082/event`。
-
-> NapCat 的 OneBot11 配置在 `versions/.../resources/app/napcat/config/` 下的 `napcat_<QQ号>.json` 中。
-
-### 4. 启动机器人
-
-确认 NapCat 已运行、WebSocket 已就绪后，在项目目录执行：
-
-```bash
-cd D:\jiaodian\iamai
-uv run python examples/yqy_bot/run.py --config examples/yqy_bot/config.onebot11.napcat.ws_reverse.toml
-```
-
-启动日志中看到 `onebot11 adapter starting in ws-reverse mode` 和 `onebot11 reverse websocket server listening on ws://127.0.0.1:8082/event` 即表示机器人已接入 QQ。
-
-## 终端测试模式
-
-如果临时没有 NapCatQQ，可用终端模式在命令行里对话，无需启动 NapCat：
-
-```bash
-cd D:\jiaodian\iamai
 uv run python examples/yqy_bot/run.py --config examples/yqy_bot/config.terminal.toml
 ```
 
-## 目录结构
+NapCat 模式：
 
-```
-yqy_bot/
-├── config/                  # 所有配置文件（JSON）
-│   ├── prompt.json          # 人设提示词
-│   ├── mood.json            # 情绪系统参数
-│   ├── relation.json        # 关系系统参数
-│   ├── behavior.json        # 行为决策权重
-│   ├── active_life.json     # 主动行为参数
-│   ├── reflection.json      # 反思系统参数
-│   ├── memory_filter.json   # 记忆过滤规则
-│   ├── bot.json             # 通用参数
-│   └── users.json           # 用户身份映射
-├── services/                # 业务逻辑层
-│   ├── mood.py              # 情绪服务
-│   ├── relation.py          # 关系服务
-│   ├── behavior.py          # 行为决策引擎
-│   ├── memory.py            # 长期记忆
-│   ├── memory_filter.py     # 记忆过滤
-│   ├── reflection.py        # 反思系统
-│   ├── history.py           # 聊天历史
-│   └── db.py                # SQLite 数据库
-├── src/yqy_bot/plugins/
-│   ├── chat.py              # 核心聊天插件
-│   └── active_life.py       # 主动行为插件
-├── run.py                   # 启动入口
-└── pyproject.toml
-```
-
-## 功能特性
-
-- **自由聊天** — 带人设的 DeepSeek 对话，自动选择文字/表情/斗图回复
-- **上下文记忆** — 多轮对话历史 + SQLite 持久化
-- **长期记忆** — LLM 提取用户重要事实
-- **情绪系统** — mood / energy / loneliness 随时间衰减
-- **关系系统** — 好感度 / 亲密度 / 信任度，不同身份不同语气
-- **行为决策引擎** — 加权随机选择 chat / meme / poke / silent
-- **主动行为** — 孤独或精力足够时主动联系用户
-- **反思系统** — 从聊天中提炼观察和判断
-
-
+```bash
 uv run python examples/yqy_bot/run.py --config examples/yqy_bot/config.onebot11.napcat.ws_reverse.toml
+```
 
+Docker Compose 开发模式：
+
+```bash
+cd examples/yqy_bot
+docker compose up -d --build
+docker compose logs -f qqbot
+```
+## 日常启动流程：
+
+```zsh
+cd /home/yqy/Projects/iamai/examples/yqy_bot
+# 改完本地代码后
+docker compose restart qqbot
+docker compose logs -f --tail=80 qqbot
+```
+说明：
+- 代码会以挂载方式进入容器，改完宿主机代码后直接重启容器即可生效
+- 容器内默认通过 `host.docker.internal:3000` 访问宿主机上的 NapCat HTTP 服务
+- 如果你本机没有把 `host.docker.internal` 映射到宿主机，请保留 compose 里的 `extra_hosts` 配置
+
+## 目录
+
+```text
+src/yqy_bot/
+├── __init__.py
+├── plugins/
+│   └── chat.py
+├── core/
+│   ├── models.py
+│   ├── config.py
+│   ├── pipeline.py
+│   ├── llm_router.py
+│   └── cooldown.py
+├── intent/
+│   └── router.py
+├── response/
+│   └── generator.py
+├── context/
+│   ├── builder.py
+│   └── prompt.py
+├── safety/
+│   └── guard.py
+├── qq/
+│   ├── parser.py
+│   ├── sender.py
+│   ├── emoji.py
+│   ├── human.py
+│   ├── napcat_client.py
+│   └── napcat_tools.py
+├── storage/
+│   ├── database.py
+│   └── repositories.py
+└── background/
+    └── worker.py
+```
+
+## 导入方式
+
+项目采用**绝对导入**（`from yqy_bot.xxx import ...`），而非相对导入（`from ..xxx import ...`）。
+
+运行时需确保 `PYTHONPATH` 包含 `src` 目录：
+
+- 本地运行：iamai 的 TOML 配置中 `python_paths = ["src"]` 已自动设置
+- Docker 运行：`docker-compose.yml` 中已配置 `PYTHONPATH: /workspace/iamai/examples/yqy_bot/src:/workspace/iamai/python`
+
+## 架构文档
+
+详细架构说明见 [docs/architecture.md](docs/architecture.md)。

@@ -1,16 +1,38 @@
 {
-  "max_history_turns": 15,
-  "meme_api_url": "https://api.52vmy.cn/api/img/tu/qq",
-  "meme_save_keywords": ["存表情", "收藏表情", "学习表情包", "记住这个表情", "存这个", "收藏这个"],
-  "meme_send_keywords": ["发我的表情", "发我收藏的", "发收藏的", "我收藏的表情", "发个收藏", "来个收藏", "来张收藏的", "qq里收藏的"],
-  "meme_delete_keywords": ["删表情", "删除表情", "删收藏", "删除收藏"],
-  "group_reply": {
-    "enabled": true,
-    "blocked_group_ids": ["751476984"],
-    "base_probability": 0.15,
-    "cooldown_seconds": 10,
-    "trigger_keywords": ["YHarvest", "yqy", "YQY"],
-    "context_aware_enabled": true,
-    "max_replies_per_minute": 3
+  "database_path": ".iamai/yqy_bot.sqlite3",
+  "max_history_turns": 16,
+  "long_context_turns": 12,
+  "private_cooldown_seconds": 0.1,
+  "group_cooldown_seconds": 5,
+  "group_heat_window_seconds": 300,
+  "quiet_threshold": 3,
+  "active_threshold": 6,
+  "hot_threshold": 12,
+  "flood_threshold": 20,
+  "background_batch_size": 6,
+  "background_flush_seconds": 12.0,
+  "group_trigger_keywords": ["YHarvest", "ai", "123", "帮我看看"],
+  "private_trigger_keywords": [],
+  "blocked_group_ids": [],
+  "blocked_user_ids": [],
+  "superusers": ["2510989916"],
+  "allow_private_short_reply": true,
+  "allow_group_short_reply": false,
+  "default_group_mode": "quiet",
+  "napcat": {
+    "http_base_url": "http://127.0.0.1:3000",
+    "access_token": "",
+    "timeout_seconds": 8,
+    "custom_face_count": 48
+  },
+  "context": {
+    "enable_history_backfill": false,
+    "history_backfill_cooldown_seconds": 60,
+    "group_recent_turns_min": 5,
+    "private_recent_turns_limit": 12,
+    "group_recent_turns_limit": 20,
+    "memory_limit": 5,
+    "reflection_limit": 2,
+    "prompt_max_chars": 8000
   }
 }

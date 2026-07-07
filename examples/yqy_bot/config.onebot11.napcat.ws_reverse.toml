@@ -3,7 +3,7 @@ log_level = "INFO"
 command_prefixes = ["/"]
 adapters = ["onebot11"]
 plugin_dirs = ["src/yqy_bot/plugins"]
-python_paths = ["src", "services"]
+python_paths = ["src"]
 superusers = ["738151903"]
 
 [runtime.hot_reload]
@@ -28,7 +28,3 @@ api_timeout = 10.0
 allow_reload = true
 allow_config_reload = true
 allow_introspection = true
-
-[plugin.yqy_chat.llm]
-temperature = 0.7
-max_tokens = 512

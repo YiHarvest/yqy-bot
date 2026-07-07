@@ -1,0 +1,31 @@
+services:
+  qqbot:
+    container_name: qqbot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace/iamai/examples/yqy_bot
+    command: >
+      sh -lc "uv sync && exec uv run python run.py --config config.onebot11.napcat.ws_reverse.toml"
+    volumes:
+      - ../..:/workspace/iamai
+      - qqbot-uv-cache:/root/.cache/uv
+      - qqbot-uv-env:/opt/uv-env
+    env_file:
+       - ../../.env
+    environment:
+      UV_PROJECT_ENVIRONMENT: /opt/uv-env
+      UV_CACHE_DIR: /root/.cache/uv
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /workspace/iamai/examples/yqy_bot/src:/workspace/iamai/python
+      NAPCAT_HTTP_BASE_URL: http://host.docker.internal:13000
+      TZ: Asia/Shanghai
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - "8082:8082"
+    restart: unless-stopped
+
+volumes:
+  qqbot-uv-cache:
+  qqbot-uv-env:
