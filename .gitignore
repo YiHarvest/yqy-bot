@@ -81,4 +81,5 @@ examples/yqy_bot/data/**/*.sqlite
 examples/yqy_bot/data/**/*.jsonl
 
 # documentation (local only)
-examples/yqy_bot/doc/
+examples/yqy_bot/docs/
+examples/yqy_bot/.iamai/
