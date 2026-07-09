@@ -1,27 +1,85 @@
 # YQY_BOT
 
-基于 `iamai` + NapCatQQ 的 QQ 被动聊天机器人 MVP。
+基于 `iamai` 框架 + NapCatQQ 的智能 QQ 聊天机器人。
 
-## 目标
+## 架构概览
 
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         yqy_bot 业务层                           │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐  │
+│  │ ChatPipeline│ │ContextBuilder│ │LLMRouter   │ │Background │  │
+│  │ (消息处理)   │ │ (上下文组装) │ │ (多角色路由)│ │Worker     │  │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘  │
+├─────────────────────────────────────────────────────────────────┤
+│                       iamai 框架层                               │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐  │
+│  │   Runtime   │ │   Plugin    │ │   Context   │ │ OneBot11  │  │
+│  │ (运行时容器) │ │ (插件基类)   │ │ (HandlerCtx)│ │ Adapter   │  │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-`消息接入 -> MessageParser -> ReplyGate -> IntentRouter -> ContextBuilder -> PromptBuilder -> LLMRouter -> ResponseGenerator -> FactGuard/Safety -> QQSender`
+## 消息处理流程
 
-后台只做慢速学习：
+```
+消息接入 -> MessageParser -> ReplyGate -> IntentRouter -> ContextBuilder -> PromptBuilder -> LLMRouter -> ResponseGenerator -> SafetyGuard -> QQSender
+```
 
-- 用户画像
-- 群聊画像
-- 摘要
-- 记忆
-- 反思
+### 上下文组装
+
+每次回复前，`ContextBuilder` 并行加载以下组件：
+
+| 组件 | 来源 | 说明 |
+|------|------|------|
+| Recent History | `chat_history` 表 | 群聊 20 条 / 私聊 12 条 |
+| Chat Summary | `chat_summary` 表 | 历史对话压缩 |
+| User Profile | `user_profile` 表 | 偏好、风格、关注点 |
+| Group Profile | `group_profile` 表 | 群风格、话题、活跃者 |
+| Memories | `memory` 表 | 分数 ≥ 0.35 的相关记忆 |
+| Reflections | `reflection` 表 | LLM 提取的反思 |
+
+### 后台学习
+
+响应发送后，`BackgroundWorker` 异步处理：
+
+- 用户画像更新（偏好、关注点）
+- 群画像更新（话题、活跃者）
+- 聊天摘要压缩
+- 记忆提取与评分
+- 反思记录
+
+### 群热度自适应
+
+根据群聊活跃度动态调整回复策略：
+
+| 状态 | 消息数/5分钟 | 回复条件 |
+|------|-------------|---------|
+| quiet | < 3 | @、回复、关键词、问题 |
+| active | 3-6 | @、回复、关键词、强问题 |
+| hot | 6-12 | 仅 @ 或回复 |
+| flood | > 12 | 仅 @ 且短回复 |
+
+### LLM 多角色路由
+
+不同任务使用独立的 LLM 配置：
+
+| 角色 | 用途 | 环境变量前缀 |
+|------|------|-------------|
+| chat | 日常聊天 | `CHAT_OPENAI_*` |
+| intent | 意图决策 | `INTENT_OPENAI_*` |
+| reason | 情感推理 | `REASON_OPENAI_*` |
+| vision | 图像理解 | `VISION_OPENAI_*` |
+| background | 后台学习 | `BACKGROUND_OPENAI_*` |
+| long_context | 长上下文 | `LONG_CONTEXT_OPENAI_*` |
 
 ## 配置
 
-项目只保留 3 个 JSON 配置文件：
+项目配置文件：
 
-- `config/bot.json`
-- `config/persona.json`
-- `config/safety.json`
+- `config/bot.json` - 行为参数（冷却、热度阈值、超级用户等）
+- `config/persona.json` - 人设、说话风格、示例
+- `config/safety.json` - 安全边界
 
 ## 环境变量
 
@@ -76,18 +134,20 @@ cd examples/yqy_bot
 docker compose up -d --build
 docker compose logs -f qqbot
 ```
-## 日常启动流程：
+
+日常启动流程：
 
 ```zsh
 cd /home/yqy/Projects/iamai/examples/yqy_bot
 # 改完本地代码后
 docker compose restart qqbot
-docker compose logs -f --tail=80 qqbot
+docker compose logs -f qqbot
 ```
+
 说明：
-- 代码会以挂载方式进入容器，改完宿主机代码后直接重启容器即可生效
+- 代码以挂载方式进入容器，改完宿主机代码后直接重启容器即可生效
 - 容器内默认通过 `host.docker.internal:3000` 访问宿主机上的 NapCat HTTP 服务
-- 如果你本机没有把 `host.docker.internal` 映射到宿主机，请保留 compose 里的 `extra_hosts` 配置
+- 若本机没有 `host.docker.internal` 映射，请保留 compose 里的 `extra_hosts` 配置
 
 ## 目录
 
