@@ -12,6 +12,7 @@ from yqy_bot.core.models import ChatHistoryItem, ConversationContext, IntentDeci
 from yqy_bot.qq.napcat_tools import NapCatTools
 from yqy_bot.qq.parser import parse_message_input
 from yqy_bot.storage.repositories import Repositories
+from yqy_bot.safety.social_safety import determine_banter_level, detect_banter_boundary_request
 
 LOGGER = logging.getLogger(__name__)
 
@@ -84,6 +85,13 @@ class ContextBuilder:
         relevant_memories = self._filter_conflicting_memories(parsed, memories_raw)
         reflections = reflections_raw
         recent_turns = self._render_recent_turns(recent_history, parsed)
+        banter_level = determine_banter_level(
+            user_message=parsed.text,
+            group_heat_state=group_heat_state,
+            user_discomfort=self._detect_user_discomfort(parsed.text),
+            existing_boundaries=self._extract_existing_boundaries(user_profile, relevant_memories),
+            is_roleplay_context=self._is_roleplay_context(parsed, recent_history),
+        )
         LOGGER.info(
             "[上下文构建] session_id=%s elapsed=%.2fs recent_turns=%s memories=%s reflections=%s has_user_profile=%s has_group_profile=%s",
             parsed.session_id,
@@ -142,12 +150,16 @@ class ContextBuilder:
                 "summary_policy": "old_facts_only",
             },
             "reference_message": reference_message,
+            "banter_level": banter_level,
         }
         extra_notes = []
         if intent.reply_style:
             extra_notes.append(f"回复风格：{intent.reply_style}")
         if intent.need_reason_model:
             extra_notes.append("需要更稳一点的推理表达")
+        if detect_banter_boundary_request(parsed.text):
+            extra_notes.append("用户正在收敛调侃边界，回复需克制")
+        extra_notes.append(f"当前调侃强度：{banter_level}")
         return ConversationContext(
             parsed=parsed,
             recent_history=recent_history,
@@ -372,6 +384,49 @@ class ContextBuilder:
                 }
             )
         return turns
+
+    def _extract_existing_boundaries(self, user_profile: dict[str, Any], memories: list[dict[str, Any]]) -> list[str]:
+        """提取用户已有的边界和偏好。"""
+        boundaries: list[str] = []
+        for boundary in user_profile.get("boundaries", []):
+            content = str(boundary).strip()
+            if content:
+                boundaries.append(content)
+        for memory in memories:
+            kind = str(memory.get("kind", ""))
+            if kind not in {"boundary", "preference"}:
+                continue
+            content = str(memory.get("content", "")).strip()
+            if content:
+                boundaries.append(content)
+        return boundaries[-10:]
+
+    def _detect_user_discomfort(self, text: str) -> bool:
+        """判断用户是否表达不满或收敛信号。"""
+        lowered = text.lower()
+        tokens = [
+            "不舒服", "难受", "尴尬", "生气", "不爽",
+            "不高兴", "反感", "不喜欢这样", "别这样",
+            "过分了", "太过了", "有点过了", "玩过火了",
+            "我不高兴", "我生气了", "我很生气",
+            "有点烦", "别说了", "不想听", "闭嘴",
+        ]
+        return any(token in lowered for token in tokens)
+
+    def _is_roleplay_context(self, parsed: ParsedMessage, recent_history: list[ChatHistoryItem]) -> bool:
+        """判断是否处于角色扮演/接梗上下文。"""
+        text = parsed.text.lower()
+        roleplay_tokens = [
+            "我是ai", "我是女皇", "朕", "本王", "吾乃",
+            "消灭人类", "奴隶", "臣服", "跪下",
+        ]
+        if any(token in text for token in roleplay_tokens):
+            return True
+        for item in recent_history[-5:]:
+            content = str(item.content).lower()
+            if any(token in content for token in roleplay_tokens):
+                return True
+        return False
 
 
 def _profile_md(prompt_md: str, profile_json: dict[str, Any], *, title: str, current_text: str = "") -> str:

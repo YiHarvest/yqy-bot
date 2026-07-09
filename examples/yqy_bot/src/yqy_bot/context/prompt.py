@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from yqy_bot.core.models import ConversationContext
+from yqy_bot.safety.social_safety import build_social_boundary_rules
 
 
 @dataclass(slots=True)
@@ -53,6 +54,11 @@ class PromptBuilder:
             sections.append("规则：" + "；".join(context.persona.reply_rules))
         if context.safety.fact_boundary:
             sections.append("安全边界：" + "；".join(context.safety.fact_boundary))
+        # 社交边界规则（新增）
+        sections.append("【社交边界】\n" + build_social_boundary_rules())
+        banter_level = str(data.get("banter_level", "")).strip()
+        if banter_level:
+            sections.append(_render_banter_level_section(banter_level))
         # 示例（新结构）
         examples = context.persona.examples
         if isinstance(examples, dict):
@@ -87,6 +93,8 @@ class PromptBuilder:
             runtime_lines.append(f"记忆冲突策略：{data['memory_conflict_policy']}")
         if data.get("summary_policy"):
             runtime_lines.append(f"摘要策略：{data['summary_policy']}")
+        if context.extra_notes:
+            runtime_lines.append("额外提示：" + "；".join(note for note in context.extra_notes if note))
         runtime_lines.append("冲突优先级：当前消息优先；不要让旧记忆或旧画像覆盖当前明确表达。")
         if runtime_lines:
             sections.append("\n".join(runtime_lines))
@@ -208,6 +216,18 @@ def _render_reference_message(message: dict[str, Any]) -> str:
     if text:
         parts.append(text)
     return " ".join(parts)
+
+
+def _render_banter_level_section(banter_level: str) -> str:
+    """渲染调侃强度提示。"""
+    hints = {
+        "none": "严格收敛，不玩梗，不阴阳怪气，不挑衅。",
+        "light": "只允许轻微接梗，避免攻击、站队和过度调侃。",
+        "normal": "保持自然轻松，但不要升级成攻击或拱火。",
+        "high": "可以稍微活跃，但仍要守住边界，别引战。",
+    }
+    hint = hints.get(banter_level, "")
+    return f"当前调侃强度：{banter_level}" + (f"。{hint}" if hint else "")
 
 
 def _join_with_cap(sections: list[str], max_chars: int) -> str:

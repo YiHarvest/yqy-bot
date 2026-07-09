@@ -248,6 +248,7 @@ async def _run() -> int:
                 },
             },
         )
+        private_pipeline.bundle.config.bot.private_cooldown_seconds = 3
         private_sender = FakeSender(sent=[])
         private_input = {
             "event_id": "evt-private-1",
