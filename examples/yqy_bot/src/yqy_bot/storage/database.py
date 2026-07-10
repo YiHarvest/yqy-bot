@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+
 # 使用本地时区的当前时间
 def _local_now() -> str:
     """返回本地时区的当前时间字符串。"""

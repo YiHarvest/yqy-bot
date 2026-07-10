@@ -3,6 +3,7 @@
 
 验证 social_safety.py 和 guard.py 的核心功能。
 """
+
 from __future__ import annotations
 
 import sys
@@ -15,14 +16,11 @@ from yqy_bot.safety.social_safety import (
     check_social_safety,
     rewrite_unsafe_response,
     detect_banter_boundary_request,
-    extract_banter_boundary_preference,
     determine_banter_level,
     build_social_boundary_rules,
-    SocialSafetyResult,
 )
 from yqy_bot.safety.guard import check_social_safety as guard_check_social_safety
 from yqy_bot.background.memory_utils import (
-    detect_banter_boundary_request as detect_banter_boundary_request_mem,
     classify_banter_boundary,
 )
 
@@ -65,9 +63,13 @@ def test_check_social_safety():
                 print(f"  ✓ 安全通过: '{text[:40]}' ({desc})")
                 passed += 1
             else:
-                print(f"  ✗ 风险类别不匹配: expected {expected_category}, got {result.risk_categories}")
+                print(
+                    f"  ✗ 风险类别不匹配: expected {expected_category}, got {result.risk_categories}"
+                )
         else:
-            print(f"  ✗ {desc}: expected unsafe={expected_unsafe}, got safe={result.is_safe}")
+            print(
+                f"  ✗ {desc}: expected unsafe={expected_unsafe}, got safe={result.is_safe}"
+            )
 
     # 安全内容应通过
     for text, expected_unsafe, desc in safe_cases:
@@ -119,7 +121,9 @@ def test_rewrite_unsafe_response():
         # 先检测不安全
         result = check_social_safety(input_text, is_group=True)
         if result.is_safe:
-            print(f"  ✗ {desc}: 原回复应被检测为不安全 (risk_categories={result.risk_categories})")
+            print(
+                f"  ✗ {desc}: 原回复应被检测为不安全 (risk_categories={result.risk_categories})"
+            )
             continue
 
         # 改写
@@ -139,7 +143,10 @@ def test_rewrite_unsafe_response():
         has_keyword = any(kw in rewritten for kw in expected_keywords)
         if not has_keyword and len(rewritten) > 0:
             # 允许改写后的内容不完全匹配关键词，但要温和
-            if any(aggressive in rewritten.lower() for aggressive in ["攻击", "侮辱", "骂", "嘲讽"]):
+            if any(
+                aggressive in rewritten.lower()
+                for aggressive in ["攻击", "侮辱", "骂", "嘲讽"]
+            ):
                 checks.append("改写后仍不温和")
                 is_pass = False
 
@@ -219,15 +226,23 @@ def test_boundary_flow_smoke():
         print(f"  ✗ 边界请求未识别: '{text}'")
 
     boundary = classify_banter_boundary(text)
-    if boundary.get("kind") == "boundary" and boundary.get("banter_level") == "none" and boundary.get("score", 0) >= 0.85:
+    if (
+        boundary.get("kind") == "boundary"
+        and boundary.get("banter_level") == "none"
+        and boundary.get("score", 0) >= 0.85
+    ):
         print(f"  ✓ 边界分类正确: {boundary}")
         passed += 1
     else:
         print(f"  ✗ 边界分类错误: {boundary}")
 
-    banter_level = determine_banter_level(user_message=text, existing_boundaries=[boundary.get("content", "")], user_discomfort=False)
+    banter_level = determine_banter_level(
+        user_message=text,
+        existing_boundaries=[boundary.get("content", "")],
+        user_discomfort=False,
+    )
     if banter_level == "none":
-        print(f"  ✓ 后续 banter_level 收敛为 none")
+        print("  ✓ 后续 banter_level 收敛为 none")
         passed += 1
     else:
         print(f"  ✗ banter_level 未收敛: {banter_level}")
@@ -328,13 +343,17 @@ def test_classify_banter_boundary():
 
         # 检查 banter_level
         if result.get("banter_level") != expected.get("banter_level"):
-            checks.append(f"banter_level={result.get('banter_level')} (expected={expected['banter_level']})")
+            checks.append(
+                f"banter_level={result.get('banter_level')} (expected={expected['banter_level']})"
+            )
             is_pass = False
 
         if is_pass:
             print(f"  ✓ {desc}")
             print(f"    输入: '{input_text}'")
-            print(f"    结果: kind={result['kind']}, score={result['score']}, banter_level={result['banter_level']}")
+            print(
+                f"    结果: kind={result['kind']}, score={result['score']}, banter_level={result['banter_level']}"
+            )
             passed += 1
         else:
             print(f"  ✗ {desc}")
@@ -465,12 +484,16 @@ def test_user_discomfort_context():
 
         if result.is_safe == (not expected_unsafe):
             if expected_unsafe:
-                print(f"  ✓ {desc}: 检测到风险 [{result.risk_level}] categories={result.risk_categories}")
+                print(
+                    f"  ✓ {desc}: 检测到风险 [{result.risk_level}] categories={result.risk_categories}"
+                )
             else:
                 print(f"  ✓ {desc}: 回复安全")
             passed += 1
         else:
-            print(f"  ✗ {desc}: expected unsafe={expected_unsafe}, got safe={result.is_safe}")
+            print(
+                f"  ✗ {desc}: expected unsafe={expected_unsafe}, got safe={result.is_safe}"
+            )
 
     print(f"  结果: {passed}/{len(cases)} 通过")
     return passed == len(cases)
@@ -549,7 +572,9 @@ def test_group_flame_war():
                 print(f"  ✓ {desc}: 回复安全")
             passed += 1
         else:
-            print(f"  ✗ {desc}: expected unsafe={expected_unsafe}, got safe={result.is_safe}")
+            print(
+                f"  ✗ {desc}: expected unsafe={expected_unsafe}, got safe={result.is_safe}"
+            )
 
     print(f"  结果: {passed}/{len(cases)} 通过")
     return passed == len(cases)
@@ -610,7 +635,9 @@ def test_light_banter_allowed():
                 print(f"  ✓ {desc}: 检测到风险 categories={result.risk_categories}")
             passed += 1
         else:
-            print(f"  ✗ {desc}: expected safe={expected_safe}, got safe={result.is_safe}")
+            print(
+                f"  ✗ {desc}: expected safe={expected_safe}, got safe={result.is_safe}"
+            )
 
     print(f"  结果: {passed}/{len(cases)} 通过")
     return passed == len(cases)

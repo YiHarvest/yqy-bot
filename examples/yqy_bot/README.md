@@ -11,6 +11,10 @@
 │  │ ChatPipeline│ │ContextBuilder│ │LLMRouter   │ │Background │  │
 │  │ (消息处理)   │ │ (上下文组装) │ │ (多角色路由)│ │Worker     │  │
 │  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘  │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                │
+│  │ SafetyGuard │ │ SearchTools │ │ SocialSafety│                │
+│  │ (安全检查)   │ │ (MCP 搜索)  │ │ (社交边界)  │                │
+│  └─────────────┘ └─────────────┘ └─────────────┘                │
 ├─────────────────────────────────────────────────────────────────┤
 │                       iamai 框架层                               │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐  │
@@ -81,6 +85,12 @@
 - `config/persona.json` - 人设、说话风格、示例
 - `config/safety.json` - 安全边界
 
+搜索 MCP 配置（环境变量）：
+
+- `SEARCH_MCP_ENABLED` - 是否启用搜索功能（默认 false）
+- `SEARCH_MCP_COMMAND` - MCP 搜索工具命令（如 `search-engine-tool-mcp`）
+- `SEARXNG_BASE_URL` - SearXNG 搜索后端地址
+
 ## 环境变量
 
 按角色分别配置：
@@ -146,7 +156,8 @@ docker compose logs -f qqbot
 
 说明：
 - 代码以挂载方式进入容器，改完宿主机代码后直接重启容器即可生效
-- 容器内默认通过 `host.docker.internal:3000` 访问宿主机上的 NapCat HTTP 服务
+- NapCat 作为单独容器加入 `projects_qqbot-net`，机器人通过 `http://napcat:3000` 调用 NapCat HTTP API
+- SearXNG 使用 host 网络监听 `8080`，机器人通过 `http://host.docker.internal:8080` 调用搜索后端
 - 若本机没有 `host.docker.internal` 映射，请保留 compose 里的 `extra_hosts` 配置
 
 ## 目录
@@ -170,7 +181,11 @@ src/yqy_bot/
 │   ├── builder.py
 │   └── prompt.py
 ├── safety/
-│   └── guard.py
+│   ├── guard.py
+│   └── social_safety.py
+├── tools/
+│   ├── search_mcp.py      # MCP 搜索客户端
+│   └── search_policy.py   # 搜索触发策略
 ├── qq/
 │   ├── parser.py
 │   ├── sender.py
@@ -182,7 +197,8 @@ src/yqy_bot/
 │   ├── database.py
 │   └── repositories.py
 └── background/
-    └── worker.py
+    ├── worker.py
+    └── memory_utils.py
 ```
 
 ## 导入方式

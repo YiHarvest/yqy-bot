@@ -30,7 +30,9 @@ class SendCooldown:
         cooldown = self._cooldown_seconds(parsed)
         return now - last_reply_at >= cooldown
 
-    def mark_replied(self, parsed: ParsedMessage, *, now: float, group_heat_state: str) -> None:
+    def mark_replied(
+        self, parsed: ParsedMessage, *, now: float, group_heat_state: str
+    ) -> None:
         """标记已回复状态，更新冷却时间和热度状态。
 
         Args:
@@ -41,7 +43,9 @@ class SendCooldown:
         state = self.repos.get_cooldown_state(parsed.chat_key)
         recent_10s_count = int(state.get("recent_10s_count", 0)) if state else 0
         recent_30s_count = int(state.get("recent_30s_count", 0)) if state else 0
-        last_history_backfill_at = float(state.get("last_history_backfill_at", 0.0)) if state else 0.0
+        last_history_backfill_at = (
+            float(state.get("last_history_backfill_at", 0.0)) if state else 0.0
+        )
         self.repos.upsert_cooldown_state(
             parsed=parsed,
             last_message_at=now,
@@ -61,7 +65,11 @@ class SendCooldown:
         Returns:
             群聊或私聊对应的冷却时间秒数
         """
-        return self.config.bot.group_cooldown_seconds if parsed.is_group else self.config.bot.private_cooldown_seconds
+        return (
+            self.config.bot.group_cooldown_seconds
+            if parsed.is_group
+            else self.config.bot.private_cooldown_seconds
+        )
 
 
 @dataclass(slots=True)
@@ -106,7 +114,9 @@ class GroupHeat:
         )
         return heat_state
 
-    def _count_recent(self, state: dict[str, Any], now: float, *, window_seconds: int) -> int:
+    def _count_recent(
+        self, state: dict[str, Any], now: float, *, window_seconds: int
+    ) -> int:
         """计算指定时间窗口内的消息计数。
 
         Args:
@@ -141,8 +151,14 @@ class GroupHeat:
         bot = self.config.bot
         if recent_30s_count >= bot.flood_threshold:
             return "flood"
-        if recent_30s_count >= bot.hot_threshold or recent_10s_count >= bot.hot_threshold:
+        if (
+            recent_30s_count >= bot.hot_threshold
+            or recent_10s_count >= bot.hot_threshold
+        ):
             return "hot"
-        if recent_30s_count >= bot.active_threshold or recent_10s_count >= bot.active_threshold:
+        if (
+            recent_30s_count >= bot.active_threshold
+            or recent_10s_count >= bot.active_threshold
+        ):
             return "active"
         return "quiet"

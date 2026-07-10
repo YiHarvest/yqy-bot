@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import random
@@ -77,7 +76,9 @@ class EmojiItem:
 class EmojiService:
     """表情服务类，管理机器人收藏表情的获取、选择和使用。"""
 
-    def __init__(self, repos: Repositories, napcat: NapCatTools, *, custom_face_count: int = 48) -> None:
+    def __init__(
+        self, repos: Repositories, napcat: NapCatTools, *, custom_face_count: int = 48
+    ) -> None:
         """初始化表情服务。
 
         Args:
@@ -98,7 +99,13 @@ class EmojiService:
         Returns:
             解析后的表情项列表
         """
-        response = await self.napcat.fetch_custom_face_detail(count)
+        try:
+            response = await self.napcat.fetch_custom_face_detail(count)
+        except Exception as exc:
+            LOGGER.warning(
+                "fetch custom faces failed, fallback to builtin face: %s", exc
+            )
+            return []
         items = _extract_items(response)
         parsed: list[EmojiItem] = []
         for item in items:
@@ -146,9 +153,15 @@ class EmojiService:
             随机内置表情项
         """
         item = random.choice(BUILTIN_FACES)
-        return EmojiItem(emoji_type="face", face_id=str(item["face_id"]), summary=str(item["summary"]))
+        return EmojiItem(
+            emoji_type="face",
+            face_id=str(item["face_id"]),
+            summary=str(item["summary"]),
+        )
 
-    async def choose_for_reply(self, intent: IntentDecision, reply_text: str) -> EmojiItem | None:
+    async def choose_for_reply(
+        self, intent: IntentDecision, reply_text: str
+    ) -> EmojiItem | None:
         """根据意图和回复内容选择合适的表情。
 
         Args:
@@ -211,7 +224,12 @@ class EmojiService:
             if not normalized.text:
                 normalized.text = ""
             return normalized.normalized()
-        if intent.need_emoji and not normalized.text and not normalized.send_face and not normalized.send_mface:
+        if (
+            intent.need_emoji
+            and not normalized.text
+            and not normalized.send_face
+            and not normalized.send_mface
+        ):
             custom = await self.get_random_custom_face()
             if custom is not None:
                 return custom.to_response().normalized()
@@ -265,7 +283,14 @@ def _is_explicit_emoji_request(text: str) -> bool:
     Returns:
         如果包含表情请求关键词则返回 True
     """
-    keywords = ["发个表情", "来个表情", "表情包", "发你收藏的表情", "来个收藏表情", "来个收藏的表情"]
+    keywords = [
+        "发个表情",
+        "来个表情",
+        "表情包",
+        "发你收藏的表情",
+        "来个收藏表情",
+        "来个收藏的表情",
+    ]
     return any(keyword in text for keyword in keywords)
 
 
@@ -291,7 +316,9 @@ def _extract_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
             if isinstance(value, list):
                 candidates.extend(value)
         if not candidates:
-            candidates.extend([value for value in data.values() if isinstance(value, dict)])
+            candidates.extend(
+                [value for value in data.values() if isinstance(value, dict)]
+            )
     elif isinstance(data, list):
         candidates.extend(data)
     if not candidates:
@@ -311,7 +338,9 @@ def _parse_custom_face_item(item: dict[str, Any]) -> EmojiItem | None:
         解析后的 EmojiItem 对象，如果数据无效则返回 None
     """
     emoji_id = _first_str(item, ("emoji_id", "id", "face_id"))
-    emoji_package_id = _first_str(item, ("emoji_package_id", "package_id", "packageId", "pkg_id"))
+    emoji_package_id = _first_str(
+        item, ("emoji_package_id", "package_id", "packageId", "pkg_id")
+    )
     key = _first_str(item, ("key", "emoji_key", "mkey"))
     summary = _first_str(item, ("summary", "name", "title", "desc"))
     image_url = _first_str(item, ("url", "image_url", "file", "path"))

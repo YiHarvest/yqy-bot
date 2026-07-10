@@ -78,24 +78,40 @@ class FakeLLMRouter:
 @dataclass
 class FakeNapCatClient:
     custom_face_payload: dict[str, Any]
+    custom_face_error: Exception | None = None
     message_payloads: dict[str, dict[str, Any]] = field(default_factory=dict)
     group_history_payload: dict[str, Any] = field(default_factory=dict)
     settings: NapCatSettings = field(default_factory=NapCatSettings)
-    calls: dict[str, int] = field(default_factory=lambda: {"fetch_custom_face_detail": 0, "get_msg": 0, "get_group_msg_history": 0, "send_msg": 0})
+    calls: dict[str, int] = field(
+        default_factory=lambda: {
+            "fetch_custom_face_detail": 0,
+            "get_msg": 0,
+            "get_group_msg_history": 0,
+            "send_msg": 0,
+        }
+    )
     sent_payloads: list[dict[str, Any]] = field(default_factory=list)
 
     async def call_action(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls[action] = self.calls.get(action, 0) + 1
         if action == "fetch_custom_face_detail":
+            if self.custom_face_error is not None:
+                raise self.custom_face_error
             return self.custom_face_payload
         if action == "get_msg":
             message_id = str(payload.get("message_id", ""))
-            return self.message_payloads.get(message_id, {"status": "ok", "retcode": 0, "data": {}})
+            return self.message_payloads.get(
+                message_id, {"status": "ok", "retcode": 0, "data": {}}
+            )
         if action == "get_group_msg_history":
             return self.group_history_payload
         if action in {"send_msg", "send_private_msg", "send_group_msg"}:
             self.sent_payloads.append({"action": action, "payload": dict(payload)})
-            return {"status": "ok", "retcode": 0, "data": {"message_id": payload.get("message_id", "sent")}}
+            return {
+                "status": "ok",
+                "retcode": 0,
+                "data": {"message_id": payload.get("message_id", "sent")},
+            }
         if action in {"get_group_member_info", "get_group_member_list"}:
             return {"status": "ok", "retcode": 0, "data": {}}
         return {"status": "ok", "retcode": 0, "data": {}}
@@ -119,6 +135,7 @@ def _fresh_pipeline(
     temp_db: Path,
     napcat_payload: dict[str, Any],
     *,
+    custom_face_error: Exception | None = None,
     message_payloads: dict[str, dict[str, Any]] | None = None,
     group_history_payload: dict[str, Any] | None = None,
     enable_history_backfill: bool = False,
@@ -130,8 +147,10 @@ def _fresh_pipeline(
     fake_llm = FakeLLMRouter()
     fake_napcat = FakeNapCatClient(
         custom_face_payload=napcat_payload,
+        custom_face_error=custom_face_error,
         message_payloads=message_payloads or {},
-        group_history_payload=group_history_payload or {"status": "ok", "retcode": 0, "data": {}},
+        group_history_payload=group_history_payload
+        or {"status": "ok", "retcode": 0, "data": {}},
     )
     pipeline.bundle.llm_router = fake_llm
     pipeline.bundle.intent_router.llm_router = fake_llm
@@ -151,7 +170,9 @@ def _count_rows(db_path: Path, sql: str, params: tuple[Any, ...] = ()) -> int:
         connection.close()
 
 
-def _fetch_history_payloads(db_path: Path, session_id: str, role: str | None = None) -> list[dict[str, Any]]:
+def _fetch_history_payloads(
+    db_path: Path, session_id: str, role: str | None = None
+) -> list[dict[str, Any]]:
     connection = sqlite3.connect(db_path)
     try:
         if role is None:
@@ -212,7 +233,9 @@ async def _build_context_prompt(
     intent: IntentDecision | None = None,
 ) -> tuple[Any, str]:
     intent = intent or IntentDecision(should_reply=True, reply_style="normal")
-    context = await pipeline.bundle.context_builder.build(parsed, intent, group_heat_state=group_heat_state)
+    context = await pipeline.bundle.context_builder.build(
+        parsed, intent, group_heat_state=group_heat_state
+    )
     prompt = PromptBuilder().build(context)
     return context, prompt
 
@@ -264,7 +287,9 @@ async def _run() -> int:
                 segments=[{"type": "text", "data": {"text": "你好，你是谁"}}],
             ),
         }
-        private_result = await private_pipeline.process_message(private_input, sender=private_sender)
+        private_result = await private_pipeline.process_message(
+            private_input, sender=private_sender
+        )
         private_pass = (
             private_result.parsed.session_id == "private:10001"
             and private_result.parsed.sender_display_name == "Alice"
@@ -273,10 +298,19 @@ async def _run() -> int:
             and private_result.response is not None
             and private_result.response.text == "我是 YHarvest。"
             and private_result.assistant_written
-            and _count_rows(tmpdir_path / "private.sqlite3", "SELECT COUNT(*) FROM chat_history WHERE chat_key = 'private:10001'") == 2
-            and _count_rows(tmpdir_path / "private.sqlite3", "SELECT COUNT(*) FROM intent_log WHERE chat_key = 'private:10001'") == 1
+            and _count_rows(
+                tmpdir_path / "private.sqlite3",
+                "SELECT COUNT(*) FROM chat_history WHERE chat_key = 'private:10001'",
+            )
+            == 2
+            and _count_rows(
+                tmpdir_path / "private.sqlite3",
+                "SELECT COUNT(*) FROM intent_log WHERE chat_key = 'private:10001'",
+            )
+            == 1
             and len(private_sender.sent) == 1
-            and private_sender.sent[0]["segments"] == [{"type": "text", "data": {"text": "我是 YHarvest。"}}]
+            and private_sender.sent[0]["segments"]
+            == [{"type": "text", "data": {"text": "我是 YHarvest。"}}]
         )
 
         group_pipeline, _ = _fresh_pipeline(
@@ -314,15 +348,29 @@ async def _run() -> int:
                 segments=[{"type": "text", "data": {"text": "群里第二条"}}],
             ),
         }
-        group_result_1 = await group_pipeline.process_message(group_input_1, sender=group_sender)
-        group_result_2 = await group_pipeline.process_message(group_input_2, sender=group_sender)
-        group_user_payloads = _fetch_history_payloads(tmpdir_path / "group.sqlite3", "group:20001", role="user")
+        group_result_1 = await group_pipeline.process_message(
+            group_input_1, sender=group_sender
+        )
+        group_result_2 = await group_pipeline.process_message(
+            group_input_2, sender=group_sender
+        )
+        group_user_payloads = _fetch_history_payloads(
+            tmpdir_path / "group.sqlite3", "group:20001", role="user"
+        )
         group_pass = (
             group_result_1.parsed.session_id == "group:20001"
             and group_result_2.parsed.session_id == "group:20001"
-            and any(item.get("sender_display_name") == "BobCard" for item in group_user_payloads)
-            and any(item.get("sender_display_name") == "Carol" for item in group_user_payloads)
-            and all(item.get("session_id") == "group:20001" for item in group_user_payloads)
+            and any(
+                item.get("sender_display_name") == "BobCard"
+                for item in group_user_payloads
+            )
+            and any(
+                item.get("sender_display_name") == "Carol"
+                for item in group_user_payloads
+            )
+            and all(
+                item.get("session_id") == "group:20001" for item in group_user_payloads
+            )
         )
 
         at_bot_input = {
@@ -365,7 +413,10 @@ async def _run() -> int:
             ),
         }
         parsed_reply = parse_message_input(reply_input)
-        reply_pass = parsed_reply.reply_message_id == "reply-msg-9" and parsed_reply.session_id == "group:20001"
+        reply_pass = (
+            parsed_reply.reply_message_id == "reply-msg-9"
+            and parsed_reply.session_id == "group:20001"
+        )
 
         emoji_pipeline, emoji_napcat = _fresh_pipeline(
             tmpdir_path / "emoji.sqlite3",
@@ -406,10 +457,17 @@ async def _run() -> int:
             emoji_result.response is not None
             and emoji_result.response.send_mface
             and emoji_result.response.mface.get("emoji_id") == "e1"
-            and _count_rows(tmpdir_path / "emoji.sqlite3", "SELECT COUNT(*) FROM emoji_store WHERE emoji_type = 'mface'") == 1
+            and _count_rows(
+                tmpdir_path / "emoji.sqlite3",
+                "SELECT COUNT(*) FROM emoji_store WHERE emoji_type = 'mface'",
+            )
+            == 1
             and emoji_napcat.calls["fetch_custom_face_detail"] == 1
             and len(emoji_sender.sent) == 1
-            and any(segment["type"] == "mface" for segment in emoji_sender.sent[0]["segments"])
+            and any(
+                segment["type"] == "mface"
+                for segment in emoji_sender.sent[0]["segments"]
+            )
         )
 
         empty_pipeline, empty_napcat = _fresh_pipeline(
@@ -437,11 +495,54 @@ async def _run() -> int:
         builtin_pass = (
             empty_result.response is not None
             and empty_result.response.send_face
-            and empty_result.response.face_id in {item["face_id"] for item in BUILTIN_FACES}
-            and _count_rows(tmpdir_path / "empty.sqlite3", "SELECT COUNT(*) FROM emoji_store") == 0
+            and empty_result.response.face_id
+            in {item["face_id"] for item in BUILTIN_FACES}
+            and _count_rows(
+                tmpdir_path / "empty.sqlite3", "SELECT COUNT(*) FROM emoji_store"
+            )
+            == 0
             and empty_napcat.calls["fetch_custom_face_detail"] == 1
             and len(empty_sender.sent) == 1
-            and any(segment["type"] == "face" for segment in empty_sender.sent[0]["segments"])
+            and any(
+                segment["type"] == "face"
+                for segment in empty_sender.sent[0]["segments"]
+            )
+        )
+
+        error_pipeline, error_napcat = _fresh_pipeline(
+            tmpdir_path / "emoji-error.sqlite3",
+            {"status": "ok", "retcode": 0, "data": {}},
+            custom_face_error=ConnectionError("napcat unavailable"),
+        )
+        error_sender = FakeSender(sent=[])
+        error_result = await error_pipeline.process_message(
+            {
+                "event_id": "evt-emoji-error",
+                "adapter": "onebot11",
+                "platform": "qq",
+                "raw_event": _raw_event(
+                    message_id="msg-emoji-error",
+                    self_id="10086",
+                    user_id="10006",
+                    message_type="private",
+                    sender_nickname="Frank",
+                    sender_card="",
+                    segments=[{"type": "text", "data": {"text": "你收藏的表情包"}}],
+                ),
+            },
+            sender=error_sender,
+        )
+        emoji_error_fallback_pass = (
+            error_result.response is not None
+            and error_result.response.send_face
+            and error_result.response.face_id
+            in {item["face_id"] for item in BUILTIN_FACES}
+            and error_napcat.calls["fetch_custom_face_detail"] == 1
+            and len(error_sender.sent) == 1
+            and any(
+                segment["type"] == "face"
+                for segment in error_sender.sent[0]["segments"]
+            )
         )
 
         private_second_result = await private_pipeline.process_message(
@@ -487,7 +588,9 @@ async def _run() -> int:
                         message_type="group",
                         sender_nickname=f"U{index}",
                         sender_card=f"卡{index}",
-                        segments=[{"type": "text", "data": {"text": f"群消息 {index}"}}],
+                        segments=[
+                            {"type": "text", "data": {"text": f"群消息 {index}"}}
+                        ],
                     ),
                 },
                 sender=None,
@@ -518,7 +621,11 @@ async def _run() -> int:
             },
             sender=None,
         )
-        flood_pass = not flood_result.gate.allow and not flood_result.sent and not flood_result.assistant_written
+        flood_pass = (
+            not flood_result.gate.allow
+            and not flood_result.sent
+            and not flood_result.assistant_written
+        )
 
         profile_pipeline, _ = _fresh_pipeline(
             tmpdir_path / "profile.sqlite3",
@@ -603,7 +710,8 @@ async def _run() -> int:
         profile_conflict_pass = (
             "用户喜欢 A" not in conflict_profile_context.user_profile_md
             and "用户最近偏好 A" not in conflict_profile_prompt
-            and conflict_profile_context.context_data.get("summary_policy") == "old_facts_only"
+            and conflict_profile_context.context_data.get("summary_policy")
+            == "old_facts_only"
         )
 
         summary_conflict_pipeline, _ = _fresh_pipeline(
@@ -614,9 +722,15 @@ async def _run() -> int:
             "private:10001",
             "用户喜欢 A；旧事实：项目还在推进",
         )
-        original_summary = summary_conflict_pipeline.bundle.repos.get_summary("private:10001")
-        summary_conflict_pipeline.bundle.background._update_from_heuristics(_background_job(conflict_profile_input))
-        summary_after = summary_conflict_pipeline.bundle.repos.get_summary("private:10001")
+        original_summary = summary_conflict_pipeline.bundle.repos.get_summary(
+            "private:10001"
+        )
+        summary_conflict_pipeline.bundle.background._update_from_heuristics(
+            _background_job(conflict_profile_input)
+        )
+        summary_after = summary_conflict_pipeline.bundle.repos.get_summary(
+            "private:10001"
+        )
         summary_conflict_pass = summary_after == original_summary
 
         profile_hardening_pipeline, _ = _fresh_pipeline(
@@ -659,7 +773,9 @@ async def _run() -> int:
                 _background_job(noise_parsed_loop)
             )
         noise_state = profile_hardening_pipeline.bundle.repos.get_user_profile("10001")
-        noise_pass = int(noise_state.get("dirty_count", 0)) == 0 and not noise_state["profile"]
+        noise_pass = (
+            int(noise_state.get("dirty_count", 0)) == 0 and not noise_state["profile"]
+        )
 
         focus_input = parse_message_input(
             {
@@ -673,15 +789,20 @@ async def _run() -> int:
                     message_type="private",
                     sender_nickname="Alice",
                     sender_card="",
-                    segments=[{"type": "text", "data": {"text": "我最近在重构 QQ 机器人"}}],
+                    segments=[
+                        {"type": "text", "data": {"text": "我最近在重构 QQ 机器人"}}
+                    ],
                 ),
             }
         )
-        profile_hardening_pipeline.bundle.background._update_from_heuristics(_background_job(focus_input))
+        profile_hardening_pipeline.bundle.background._update_from_heuristics(
+            _background_job(focus_input)
+        )
         focus_state = profile_hardening_pipeline.bundle.repos.get_user_profile("10001")
-        focus_pass = (
-            int(focus_state.get("dirty_count", 0)) == 1
-            and "我最近在重构 QQ 机器人" in json.dumps(focus_state["profile"], ensure_ascii=False)
+        focus_pass = int(
+            focus_state.get("dirty_count", 0)
+        ) == 1 and "我最近在重构 QQ 机器人" in json.dumps(
+            focus_state["profile"], ensure_ascii=False
         )
 
         flood_hardening_pipeline, flood_hardening_napcat = _fresh_pipeline(
@@ -706,11 +827,16 @@ async def _run() -> int:
                 ),
             }
             flood_context_parsed = parse_message_input(flood_event)
-            flood_hardening_pipeline.bundle.group_heat.update(flood_context_parsed, now=1000.0 + index)
+            flood_hardening_pipeline.bundle.group_heat.update(
+                flood_context_parsed, now=1000.0 + index
+            )
             flood_hardening_pipeline.bundle.background._update_from_heuristics(
                 _background_job(flood_context_parsed)
             )
-        flood_state = flood_hardening_pipeline.bundle.repos.get_cooldown_state("group:20099") or {}
+        flood_state = (
+            flood_hardening_pipeline.bundle.repos.get_cooldown_state("group:20099")
+            or {}
+        )
         flood_input = parse_message_input(
             {
                 "event_id": "evt-flood-final",
@@ -744,7 +870,10 @@ async def _run() -> int:
         )
         flood_hardening_pass = (
             str(flood_state.get("heat_state", "quiet")) == "flood"
-            and flood_hardening_pipeline.bundle.background.llm_router.calls.get("background", 0) == 0
+            and flood_hardening_pipeline.bundle.background.llm_router.calls.get(
+                "background", 0
+            )
+            == 0
         )
 
         multi_group_pipeline, _ = _fresh_pipeline(
@@ -798,8 +927,10 @@ async def _run() -> int:
         )
         conflict_pass = (
             "我不喜欢 A 了" in conflict_prompt
-            and conflict_context.context_data["current_message"]["text"] == "我不喜欢 A 了"
-            and conflict_context.context_data.get("memory_conflict_policy") == "current_message_overrides_prior_memory"
+            and conflict_context.context_data["current_message"]["text"]
+            == "我不喜欢 A 了"
+            and conflict_context.context_data.get("memory_conflict_policy")
+            == "current_message_overrides_prior_memory"
             and "用户喜欢 A" not in conflict_prompt
             and conflict_context.context_data.get("relevant_memories", []) == []
             and "你喜欢 A" not in conflict_prompt
@@ -832,7 +963,8 @@ async def _run() -> int:
             group_heat_state="quiet",
         )
         reply_backfill_pass = (
-            reply_backfill_context.context_data["reference_message"]["message_id"] == "reply-msg-9"
+            reply_backfill_context.context_data["reference_message"]["message_id"]
+            == "reply-msg-9"
             and "被引用的消息" in reply_backfill_prompt
             and reply_backfill_napcat.calls["get_msg"] == 1
         )
@@ -969,15 +1101,24 @@ async def _run() -> int:
             tmpdir_path / "backfill-on.sqlite3",
             "SELECT COUNT(*) FROM chat_history WHERE chat_key = 'group:20004' AND message_id = 'hist-1' AND source = 'napcat_history'",
         )
-        backfill_on_pass = backfill_on_napcat.calls["get_group_msg_history"] == 1 and backfill_on_count == 2 and backfill_on_hist1 == 1
+        backfill_on_pass = (
+            backfill_on_napcat.calls["get_group_msg_history"] == 1
+            and backfill_on_count == 2
+            and backfill_on_hist1 == 1
+        )
         print(f"private_case: {'PASS' if private_pass else 'FAIL'}")
         print(f"group_case: {'PASS' if group_pass else 'FAIL'}")
         print(f"at_bot_case: {'PASS' if at_pass else 'FAIL'}")
         print(f"reply_case: {'PASS' if reply_pass else 'FAIL'}")
         print(f"emoji_custom_case: {'PASS' if emoji_pass else 'FAIL'}")
         print(f"emoji_builtin_fallback_case: {'PASS' if builtin_pass else 'FAIL'}")
+        print(
+            f"emoji_error_fallback_case: {'PASS' if emoji_error_fallback_pass else 'FAIL'}"
+        )
         print(f"private_cooldown_case: {'PASS' if private_cooldown_pass else 'FAIL'}")
-        print(f"group_heat_case: {'PASS' if heat_state_pass and flood_pass else 'FAIL'}")
+        print(
+            f"group_heat_case: {'PASS' if heat_state_pass and flood_pass else 'FAIL'}"
+        )
         print(f"user_profile_case: {'PASS' if profile_private_pass else 'FAIL'}")
         print(f"group_profile_case: {'PASS' if profile_group_pass else 'FAIL'}")
         print(f"profile_noise_case: {'PASS' if noise_pass else 'FAIL'}")
@@ -991,6 +1132,7 @@ async def _run() -> int:
         print(f"history_backfill_off_case: {'PASS' if backfill_off_pass else 'FAIL'}")
         print(f"history_backfill_on_case: {'PASS' if backfill_on_pass else 'FAIL'}")
         await empty_pipeline.shutdown()
+        await error_pipeline.shutdown()
         await emoji_pipeline.shutdown()
         await heat_pipeline.shutdown()
         await profile_pipeline.shutdown()
@@ -1001,29 +1143,36 @@ async def _run() -> int:
         await backfill_on_pipeline.shutdown()
         await group_pipeline.shutdown()
         await private_pipeline.shutdown()
-        return 0 if all([
-            private_pass,
-            group_pass,
-            at_pass,
-            reply_pass,
-            emoji_pass,
-            builtin_pass,
-            private_cooldown_pass,
-            heat_state_pass,
-            flood_pass,
-            profile_private_pass,
-            profile_group_pass,
-            noise_pass,
-            focus_pass,
-            profile_conflict_pass,
-            summary_conflict_pass,
-            flood_hardening_pass,
-            multi_group_pass,
-            conflict_pass,
-            reply_backfill_pass,
-            backfill_off_pass,
-            backfill_on_pass,
-        ]) else 1
+        return (
+            0
+            if all(
+                [
+                    private_pass,
+                    group_pass,
+                    at_pass,
+                    reply_pass,
+                    emoji_pass,
+                    builtin_pass,
+                    emoji_error_fallback_pass,
+                    private_cooldown_pass,
+                    heat_state_pass,
+                    flood_pass,
+                    profile_private_pass,
+                    profile_group_pass,
+                    noise_pass,
+                    focus_pass,
+                    profile_conflict_pass,
+                    summary_conflict_pass,
+                    flood_hardening_pass,
+                    multi_group_pass,
+                    conflict_pass,
+                    reply_backfill_pass,
+                    backfill_off_pass,
+                    backfill_on_pass,
+                ]
+            )
+            else 1
+        )
 
 
 def main() -> None:

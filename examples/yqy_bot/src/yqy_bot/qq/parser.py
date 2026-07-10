@@ -21,11 +21,23 @@ def parse_message_input(payload: dict[str, Any]) -> ParsedMessage:
     self_id = _string(raw_event.get("self_id") or payload.get("self_id"))
     user_id = _string(raw_event.get("user_id") or payload.get("user_id"))
     group_id = _string(raw_event.get("group_id") or payload.get("group_id") or "")
-    message_id = _string(raw_event.get("message_id") or payload.get("message_id") or payload.get("event_id"))
+    message_id = _string(
+        raw_event.get("message_id")
+        or payload.get("message_id")
+        or payload.get("event_id")
+    )
     message_type = _string(raw_event.get("message_type") or payload.get("message_type"))
-    sender = raw_event.get("sender") if isinstance(raw_event.get("sender"), dict) else {}
-    sender_nickname = _string(sender.get("nickname") if isinstance(sender, dict) else payload.get("sender_nickname"))
-    sender_card = _string(sender.get("card") if isinstance(sender, dict) else payload.get("sender_card"))
+    sender = (
+        raw_event.get("sender") if isinstance(raw_event.get("sender"), dict) else {}
+    )
+    sender_nickname = _string(
+        sender.get("nickname")
+        if isinstance(sender, dict)
+        else payload.get("sender_nickname")
+    )
+    sender_card = _string(
+        sender.get("card") if isinstance(sender, dict) else payload.get("sender_card")
+    )
     raw_segments = _extract_segments(raw_event, payload)
 
     text_parts: list[str] = []
@@ -52,7 +64,10 @@ def parse_message_input(payload: dict[str, Any]) -> ParsedMessage:
 
     text = " ".join(part for part in text_parts if part).strip()
     if not text:
-        text = _string(payload.get("text", "")).strip() or _string(raw_event.get("raw_message", "")).strip()
+        text = (
+            _string(payload.get("text", "")).strip()
+            or _string(raw_event.get("raw_message", "")).strip()
+        )
 
     is_group = message_type == "group" or bool(group_id)
     session_id = f"group:{group_id}" if is_group else f"private:{user_id}"
@@ -97,9 +112,15 @@ def parse_event(event: "EventLike") -> ParsedMessage:
         "platform": event.platform,
         "self_id": event.self_id,
         "user_id": event.user_id,
-        "group_id": getattr(event, "channel_id", None) or getattr(event, "guild_id", None) or "",
+        "group_id": getattr(event, "channel_id", None)
+        or getattr(event, "guild_id", None)
+        or "",
         "message_id": event.id,
-        "message_type": "group" if getattr(event, "channel_id", None) or getattr(event, "guild_id", None) else "private",
+        "message_type": (
+            "group"
+            if getattr(event, "channel_id", None) or getattr(event, "guild_id", None)
+            else "private"
+        ),
         "sender_nickname": "",
         "sender_card": "",
         "message": event.message.segments,
@@ -128,7 +149,9 @@ def _extract_raw_event(payload: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _extract_segments(raw_event: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]]:
+def _extract_segments(
+    raw_event: dict[str, Any], payload: dict[str, Any]
+) -> list[dict[str, Any]]:
     """从事件数据中提取消息段列表。
 
     消息段可能存在于 raw_event.message 或 payload.message/segments 字段。

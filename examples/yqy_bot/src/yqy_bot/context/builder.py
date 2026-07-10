@@ -8,11 +8,20 @@ from dataclasses import dataclass
 from typing import Any
 
 from yqy_bot.core.config import ProjectConfig
-from yqy_bot.core.models import ChatHistoryItem, ConversationContext, IntentDecision, ParsedMessage
+from yqy_bot.core.models import (
+    ChatHistoryItem,
+    ConversationContext,
+    IntentDecision,
+    ParsedMessage,
+    SearchResult,
+)
 from yqy_bot.qq.napcat_tools import NapCatTools
 from yqy_bot.qq.parser import parse_message_input
 from yqy_bot.storage.repositories import Repositories
-from yqy_bot.safety.social_safety import determine_banter_level, detect_banter_boundary_request
+from yqy_bot.safety.social_safety import (
+    determine_banter_level,
+    detect_banter_boundary_request,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -25,7 +34,14 @@ class ContextBuilder:
     repos: Repositories
     napcat_tools: NapCatTools
 
-    async def build(self, parsed: ParsedMessage, intent: IntentDecision, *, group_heat_state: str) -> ConversationContext:
+    async def build(
+        self,
+        parsed: ParsedMessage,
+        intent: IntentDecision,
+        *,
+        group_heat_state: str,
+        search_result: SearchResult | None = None,
+    ) -> ConversationContext:
         """构建完整的对话上下文对象。
 
         从数据库和 NapCat API 加载历史、画像、记忆等数据，
@@ -35,6 +51,7 @@ class ContextBuilder:
             parsed: 解析后的消息对象
             intent: 意图决策对象
             group_heat_state: 群热度状态
+            search_result: 搜索结果对象，可选
 
         Returns:
             完整的对话上下文对象，包含所有必要信息
@@ -46,13 +63,29 @@ class ContextBuilder:
         chat_summary_task = asyncio.to_thread(self.repos.get_summary, parsed.chat_key)
         user_state_task = asyncio.to_thread(self.repos.get_user_profile, parsed.user_id)
         if parsed.is_group:
-            group_state_task = asyncio.to_thread(self.repos.get_group_profile, parsed.group_id)
+            group_state_task = asyncio.to_thread(
+                self.repos.get_group_profile, parsed.group_id
+            )
         else:
-            group_state_task = asyncio.sleep(0, result={"profile": {}, "prompt_md": "", "message_count_since_update": 0})
+            group_state_task = asyncio.sleep(
+                0,
+                result={
+                    "profile": {},
+                    "prompt_md": "",
+                    "message_count_since_update": 0,
+                },
+            )
         memories_task = asyncio.to_thread(self._load_memories, parsed)
         reflections_task = asyncio.to_thread(self._load_reflections, parsed)
         # 等待基础数据加载完成
-        recent_history, chat_summary, user_state, group_state, memories_raw, reflections_raw = await asyncio.gather(
+        (
+            recent_history,
+            chat_summary,
+            user_state,
+            group_state,
+            memories_raw,
+            reflections_raw,
+        ) = await asyncio.gather(
             recent_history_task,
             chat_summary_task,
             user_state_task,
@@ -69,7 +102,9 @@ class ContextBuilder:
             title="用户画像",
             current_text=parsed.text,
         )
-        group_profile_md = _profile_md(group_state.get("prompt_md", ""), group_profile, title="群画像")
+        group_profile_md = _profile_md(
+            group_state.get("prompt_md", ""), group_profile, title="群画像"
+        )
         # 异步加载引用消息和回填历史
         reference_message_task = self._load_reference_message(parsed)
         backfill_task = (
@@ -77,7 +112,9 @@ class ContextBuilder:
             if parsed.is_group
             else asyncio.sleep(0, result=None)
         )
-        reference_message, _ = await asyncio.gather(reference_message_task, backfill_task)
+        reference_message, _ = await asyncio.gather(
+            reference_message_task, backfill_task
+        )
         # 如果回填了历史，重新加载
         if parsed.is_group:
             recent_history = self._load_recent_history(parsed)
@@ -89,7 +126,9 @@ class ContextBuilder:
             user_message=parsed.text,
             group_heat_state=group_heat_state,
             user_discomfort=self._detect_user_discomfort(parsed.text),
-            existing_boundaries=self._extract_existing_boundaries(user_profile, relevant_memories),
+            existing_boundaries=self._extract_existing_boundaries(
+                user_profile, relevant_memories
+            ),
             is_roleplay_context=self._is_roleplay_context(parsed, recent_history),
         )
         LOGGER.info(
@@ -151,6 +190,9 @@ class ContextBuilder:
             },
             "reference_message": reference_message,
             "banter_level": banter_level,
+            "search_result": (
+                _serialize_search_result(search_result) if search_result else None
+            ),
         }
         extra_notes = []
         if intent.reply_style:
@@ -160,6 +202,10 @@ class ContextBuilder:
         if detect_banter_boundary_request(parsed.text):
             extra_notes.append("用户正在收敛调侃边界，回复需克制")
         extra_notes.append(f"当前调侃强度：{banter_level}")
+        if search_result and search_result.ok:
+            extra_notes.append("已联网搜索，请优先依据搜索结果回答")
+        elif search_result and not search_result.ok:
+            extra_notes.append("搜索失败或无结果，回答时说明不确定，不要说自己不能联网")
         return ConversationContext(
             parsed=parsed,
             recent_history=recent_history,
@@ -197,7 +243,9 @@ class ContextBuilder:
             limit = self.config.bot.context.private_recent_turns_limit
         return self.repos.recent_history(parsed.chat_key, limit=limit)
 
-    async def _load_reference_message(self, parsed: ParsedMessage) -> dict[str, Any] | None:
+    async def _load_reference_message(
+        self, parsed: ParsedMessage
+    ) -> dict[str, Any] | None:
         """加载引用消息的详细信息。
 
         优先从本地数据库查询，如果未找到且启用了历史回填，
@@ -211,7 +259,9 @@ class ContextBuilder:
         """
         if not parsed.reply_message_id:
             return None
-        local = self.repos.find_history_message(parsed.reply_message_id, chat_key=parsed.chat_key)
+        local = self.repos.find_history_message(
+            parsed.reply_message_id, chat_key=parsed.chat_key
+        )
         if local is not None:
             return _reference_message_from_row(local)
         if not self.config.bot.context.enable_history_backfill:
@@ -223,7 +273,14 @@ class ContextBuilder:
         raw_event = _extract_raw_event(payload)
         if not raw_event:
             return None
-        referenced = parse_message_input({"event_id": parsed.reply_message_id, "adapter": parsed.adapter, "platform": parsed.platform, "raw_event": raw_event})
+        referenced = parse_message_input(
+            {
+                "event_id": parsed.reply_message_id,
+                "adapter": parsed.adapter,
+                "platform": parsed.platform,
+                "raw_event": raw_event,
+            }
+        )
         self.repos.add_chat_history(
             parsed=referenced,
             role="user",
@@ -232,10 +289,14 @@ class ContextBuilder:
             metadata={"segments": referenced.segments},
             message_id=referenced.message_id or parsed.reply_message_id,
         )
-        row = self.repos.find_history_message(parsed.reply_message_id, chat_key=parsed.chat_key)
+        row = self.repos.find_history_message(
+            parsed.reply_message_id, chat_key=parsed.chat_key
+        )
         return _reference_message_from_row(row) if row is not None else raw_event
 
-    async def _maybe_backfill_group_history(self, parsed: ParsedMessage, recent_history: list[ChatHistoryItem]) -> None:
+    async def _maybe_backfill_group_history(
+        self, parsed: ParsedMessage, recent_history: list[ChatHistoryItem]
+    ) -> None:
         """必要时回填群聊历史消息。
 
         当群聊历史记录不足且满足回填冷却条件时，
@@ -266,10 +327,22 @@ class ContextBuilder:
         messages = _extract_history_messages(payload)
         seen = {item.message_id for item in recent_history if item.message_id}
         for raw_message in messages:
-            normalized = parse_message_input({"event_id": raw_message.get("message_id", ""), "adapter": parsed.adapter, "platform": parsed.platform, "raw_event": raw_message})
+            normalized = parse_message_input(
+                {
+                    "event_id": raw_message.get("message_id", ""),
+                    "adapter": parsed.adapter,
+                    "platform": parsed.platform,
+                    "raw_event": raw_message,
+                }
+            )
             if not normalized.message_id or normalized.message_id in seen:
                 continue
-            if self.repos.find_history_message(normalized.message_id, chat_key=parsed.chat_key) is not None:
+            if (
+                self.repos.find_history_message(
+                    normalized.message_id, chat_key=parsed.chat_key
+                )
+                is not None
+            ):
                 continue
             seen.add(normalized.message_id)
             self.repos.add_chat_history(
@@ -295,7 +368,9 @@ class ContextBuilder:
         """
         rows: list[dict[str, Any]] = []
         if parsed.is_group:
-            rows.extend(self.repos.get_recent_memories(chat_key=parsed.chat_key, limit=3))
+            rows.extend(
+                self.repos.get_recent_memories(chat_key=parsed.chat_key, limit=3)
+            )
         rows.extend(self.repos.get_recent_memories(user_id=parsed.user_id, limit=5))
         unique: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -320,10 +395,14 @@ class ContextBuilder:
         """
         rows = self.repos.get_recent_reflections(chat_key=parsed.chat_key, limit=2)
         if parsed.is_private:
-            rows.extend(self.repos.get_recent_reflections(chat_key=parsed.user_id, limit=1))
+            rows.extend(
+                self.repos.get_recent_reflections(chat_key=parsed.user_id, limit=1)
+            )
         return rows[: self.config.bot.context.reflection_limit]
 
-    def _filter_conflicting_memories(self, parsed: ParsedMessage, memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _filter_conflicting_memories(
+        self, parsed: ParsedMessage, memories: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """过滤与当前消息冲突的记忆。
 
         当当前消息表达否定或变更意图时，
@@ -356,7 +435,9 @@ class ContextBuilder:
             )
         return filtered
 
-    def _render_recent_turns(self, recent_history: list[ChatHistoryItem], parsed: ParsedMessage) -> list[dict[str, Any]]:
+    def _render_recent_turns(
+        self, recent_history: list[ChatHistoryItem], parsed: ParsedMessage
+    ) -> list[dict[str, Any]]:
         """将聊天历史转换为对话轮次格式。
 
         Args:
@@ -368,7 +449,9 @@ class ContextBuilder:
         """
         turns: list[dict[str, Any]] = []
         for item in recent_history:
-            display_name = str(item.metadata.get("sender_display_name") or item.user_id or "").strip()
+            display_name = str(
+                item.metadata.get("sender_display_name") or item.user_id or ""
+            ).strip()
             if not display_name:
                 display_name = item.user_id
             turns.append(
@@ -385,7 +468,9 @@ class ContextBuilder:
             )
         return turns
 
-    def _extract_existing_boundaries(self, user_profile: dict[str, Any], memories: list[dict[str, Any]]) -> list[str]:
+    def _extract_existing_boundaries(
+        self, user_profile: dict[str, Any], memories: list[dict[str, Any]]
+    ) -> list[str]:
         """提取用户已有的边界和偏好。"""
         boundaries: list[str] = []
         for boundary in user_profile.get("boundaries", []):
@@ -405,20 +490,44 @@ class ContextBuilder:
         """判断用户是否表达不满或收敛信号。"""
         lowered = text.lower()
         tokens = [
-            "不舒服", "难受", "尴尬", "生气", "不爽",
-            "不高兴", "反感", "不喜欢这样", "别这样",
-            "过分了", "太过了", "有点过了", "玩过火了",
-            "我不高兴", "我生气了", "我很生气",
-            "有点烦", "别说了", "不想听", "闭嘴",
+            "不舒服",
+            "难受",
+            "尴尬",
+            "生气",
+            "不爽",
+            "不高兴",
+            "反感",
+            "不喜欢这样",
+            "别这样",
+            "过分了",
+            "太过了",
+            "有点过了",
+            "玩过火了",
+            "我不高兴",
+            "我生气了",
+            "我很生气",
+            "有点烦",
+            "别说了",
+            "不想听",
+            "闭嘴",
         ]
         return any(token in lowered for token in tokens)
 
-    def _is_roleplay_context(self, parsed: ParsedMessage, recent_history: list[ChatHistoryItem]) -> bool:
+    def _is_roleplay_context(
+        self, parsed: ParsedMessage, recent_history: list[ChatHistoryItem]
+    ) -> bool:
         """判断是否处于角色扮演/接梗上下文。"""
         text = parsed.text.lower()
         roleplay_tokens = [
-            "我是ai", "我是女皇", "朕", "本王", "吾乃",
-            "消灭人类", "奴隶", "臣服", "跪下",
+            "我是ai",
+            "我是女皇",
+            "朕",
+            "本王",
+            "吾乃",
+            "消灭人类",
+            "奴隶",
+            "臣服",
+            "跪下",
         ]
         if any(token in text for token in roleplay_tokens):
             return True
@@ -429,7 +538,9 @@ class ContextBuilder:
         return False
 
 
-def _profile_md(prompt_md: str, profile_json: dict[str, Any], *, title: str, current_text: str = "") -> str:
+def _profile_md(
+    prompt_md: str, profile_json: dict[str, Any], *, title: str, current_text: str = ""
+) -> str:
     """生成画像 Markdown 文本。
 
     如果已有缓存文本则直接使用，否则从画像字典生成。
@@ -443,7 +554,9 @@ def _profile_md(prompt_md: str, profile_json: dict[str, Any], *, title: str, cur
         Markdown 格式的画像文本
     """
     if prompt_md.strip():
-        rendered = _filter_profile_md_lines(prompt_md.strip().splitlines(), title=title, current_text=current_text)
+        rendered = _filter_profile_md_lines(
+            prompt_md.strip().splitlines(), title=title, current_text=current_text
+        )
         if rendered:
             return rendered
     if not profile_json:
@@ -451,7 +564,11 @@ def _profile_md(prompt_md: str, profile_json: dict[str, Any], *, title: str, cur
     lines = [f"### {title}"]
     for key, value in profile_json.items():
         if isinstance(value, list):
-            items = [str(item) for item in value if not _profile_item_conflicts_with_current(current_text, str(item))]
+            items = [
+                str(item)
+                for item in value
+                if not _profile_item_conflicts_with_current(current_text, str(item))
+            ]
             if not items:
                 continue
             rendered = ", ".join(items)
@@ -468,7 +585,11 @@ def _profile_md(prompt_md: str, profile_json: dict[str, Any], *, title: str, cur
 def _filter_profile_md_lines(lines: list[str], *, title: str, current_text: str) -> str:
     filtered = [line.strip() for line in lines if line.strip()]
     if current_text.strip():
-        filtered = [line for line in filtered if not _profile_item_conflicts_with_current(current_text, line)]
+        filtered = [
+            line
+            for line in filtered
+            if not _profile_item_conflicts_with_current(current_text, line)
+        ]
     if not filtered:
         return ""
     if filtered[0] != f"### {title}":
@@ -487,8 +608,14 @@ def _profile_item_conflicts_with_current(current_text: str, item_text: str) -> b
     if not subjects:
         return False
     if any(token in current_text for token in ["不喜欢", "不再", "不是"]):
-        return any(subject in item_text and ("喜欢" in item_text or "偏好" in item_text) for subject in subjects)
-    if any(token in current_text for token in ["改成", "改为", "取消", "别记", "别把", "改口"]):
+        return any(
+            subject in item_text and ("喜欢" in item_text or "偏好" in item_text)
+            for subject in subjects
+        )
+    if any(
+        token in current_text
+        for token in ["改成", "改为", "取消", "别记", "别把", "改口"]
+    ):
         return any(subject in item_text for subject in subjects)
     return False
 
@@ -506,11 +633,15 @@ def _extract_raw_event(payload: dict[str, Any]) -> dict[str, Any]:
     """
     if isinstance(payload.get("raw_event"), dict):
         return payload["raw_event"]
-    if {"self_id", "user_id", "message_id", "message_type", "message"}.issubset(payload.keys()):
+    if {"self_id", "user_id", "message_id", "message_type", "message"}.issubset(
+        payload.keys()
+    ):
         return payload
     if isinstance(payload.get("data"), dict):
         data = payload["data"]
-        if {"self_id", "user_id", "message_id", "message_type", "message"}.issubset(data.keys()):
+        if {"self_id", "user_id", "message_id", "message_type", "message"}.issubset(
+            data.keys()
+        ):
             return data
         if isinstance(data.get("message"), dict):
             return data["message"]
@@ -548,7 +679,21 @@ def _looks_like_conflict_message(text: str) -> bool:
     Returns:
         如果包含否定或变更关键词则返回 True
     """
-    return any(token in text for token in ["不喜欢", "不再", "改成", "改为", "别记", "别把", "不是", "取消", "改口", "相反"])
+    return any(
+        token in text
+        for token in [
+            "不喜欢",
+            "不再",
+            "改成",
+            "改为",
+            "别记",
+            "别把",
+            "不是",
+            "取消",
+            "改口",
+            "相反",
+        ]
+    )
 
 
 def _memory_conflicts_with_current(current_text: str, memory_text: str) -> bool:
@@ -567,8 +712,13 @@ def _memory_conflicts_with_current(current_text: str, memory_text: str) -> bool:
     if not subjects:
         return False
     if any(token in current_text for token in ["不喜欢", "不再", "不是"]):
-        return any(subject in memory_text and "喜欢" in memory_text for subject in subjects)
-    if any(token in current_text for token in ["改成", "改为", "取消", "别记", "别把", "改口"]):
+        return any(
+            subject in memory_text and "喜欢" in memory_text for subject in subjects
+        )
+    if any(
+        token in current_text
+        for token in ["改成", "改为", "取消", "别记", "别把", "改口"]
+    ):
         return any(subject in memory_text for subject in subjects)
     return False
 
@@ -632,4 +782,24 @@ def _reference_message_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "content": row.get("content", ""),
         "source": row.get("source", ""),
         "metadata": metadata,
+    }
+
+
+def _serialize_search_result(result: SearchResult) -> dict[str, Any]:
+    """将搜索结果序列化为字典格式。
+
+    Args:
+        result: SearchResult 对象
+
+    Returns:
+        搜索结果字典，适合传递给 PromptBuilder
+    """
+    return {
+        "ok": result.ok,
+        "type": result.type,
+        "query": result.query,
+        "provider": result.provider,
+        "results": result.results[:5] if result.results else [],
+        "error": result.error,
+        "message": result.message,
     }

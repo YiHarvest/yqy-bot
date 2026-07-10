@@ -21,7 +21,9 @@ class NapCatTools:
         """
         return await self.client.call_action("get_msg", {"message_id": message_id})
 
-    async def get_group_msg_history(self, group_id: str, *, message_seq: int = 0, count: int = 20) -> dict[str, Any]:
+    async def get_group_msg_history(
+        self, group_id: str, *, message_seq: int = 0, count: int = 20
+    ) -> dict[str, Any]:
         """获取群聊历史消息列表。
 
         Args:
@@ -36,7 +38,9 @@ class NapCatTools:
             {"group_id": group_id, "message_seq": message_seq, "count": count}
         )
 
-    async def get_group_msg_history_raw(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def get_group_msg_history_raw(
+        self, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         """获取群聊历史消息（原始参数格式）。
 
         Args:
@@ -79,7 +83,9 @@ class NapCatTools:
         Returns:
             群成员列表字典，包含所有成员的信息数组
         """
-        return await self.client.call_action("get_group_member_list", {"group_id": group_id})
+        return await self.client.call_action(
+            "get_group_member_list", {"group_id": group_id}
+        )
 
     async def fetch_custom_face_detail(self, count: int = 48) -> dict[str, Any]:
         """获取机器人收藏的表情列表。
@@ -90,7 +96,9 @@ class NapCatTools:
         Returns:
             收藏表情列表字典，包含表情 ID、URL 等信息
         """
-        return await self.client.call_action("fetch_custom_face_detail", {"count": count})
+        return await self.client.call_action(
+            "fetch_custom_face_detail", {"count": count}
+        )
 
     async def send_msg(
         self,
@@ -111,14 +119,19 @@ class NapCatTools:
         Returns:
             发送结果字典，包含消息 ID 等信息
         """
-        payload: dict[str, Any] = {"message_type": message_type, "message": _normalize_message(message)}
+        payload: dict[str, Any] = {
+            "message_type": message_type,
+            "message": _normalize_message(message),
+        }
         if user_id:
             payload["user_id"] = user_id
         if group_id:
             payload["group_id"] = group_id
         return await self.client.call_action("send_msg", payload)
 
-    async def send_private_msg(self, user_id: str, message: list[dict[str, Any]] | str) -> dict[str, Any]:
+    async def send_private_msg(
+        self, user_id: str, message: list[dict[str, Any]] | str
+    ) -> dict[str, Any]:
         """发送私聊消息。
 
         Args:
@@ -130,7 +143,9 @@ class NapCatTools:
         """
         return await self.send_msg("private", user_id=user_id, message=message)
 
-    async def send_group_msg(self, group_id: str, message: list[dict[str, Any]] | str) -> dict[str, Any]:
+    async def send_group_msg(
+        self, group_id: str, message: list[dict[str, Any]] | str
+    ) -> dict[str, Any]:
         """发送群聊消息。
 
         Args:
