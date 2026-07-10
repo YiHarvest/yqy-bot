@@ -32,9 +32,13 @@ class PromptBuilder:
         # 当前北京时间（关键：让 LLM 知道真实时间）
         now = datetime.now()
         current_time = now.strftime("%Y-%m-%d %H:%M:%S")
-        weekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][now.weekday()]
+        weekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][
+            now.weekday()
+        ]
         sections.append(f"【当前北京时间】{current_time} ({weekday})")
-        sections.append("⚠️ 时间优先级：【当前北京时间】是唯一正确的时间参考，历史对话中的时间信息可能已过时，请忽略历史中的错误时间。")
+        sections.append(
+            "⚠️ 时间优先级：【当前北京时间】是唯一正确的时间参考，历史对话中的时间信息可能已过时，请忽略历史中的错误时间。"
+        )
         if context.persona.personality:
             sections.append("性格：" + " / ".join(context.persona.personality))
         if context.persona.scenario:
@@ -72,30 +76,46 @@ class PromptBuilder:
                     sections.append("回复示例：" + " | ".join(example_lines))
             bad_examples = examples.get("bad", [])
             if bad_examples:
-                sections.append("禁止：" + "；".join(str(ex) for ex in bad_examples[:3]))
+                sections.append(
+                    "禁止：" + "；".join(str(ex) for ex in bad_examples[:3])
+                )
         # 输出 schema
         if context.persona.output_schema:
-            sections.append("输出格式：" + context.persona.output_schema[0] if context.persona.output_schema else "")
+            sections.append(
+                "输出格式：" + context.persona.output_schema[0]
+                if context.persona.output_schema
+                else ""
+            )
 
         runtime_lines = []
         if data.get("group_heat_state"):
             runtime_lines.append(f"场景热度：{data['group_heat_state']}")
         runtime_state = data.get("runtime_state", {})
         if isinstance(runtime_state, dict) and runtime_state:
-            runtime_lines.append("运行状态：" + json.dumps(runtime_state, ensure_ascii=False))
+            runtime_lines.append(
+                "运行状态：" + json.dumps(runtime_state, ensure_ascii=False)
+            )
         reference_message = data.get("reference_message")
         if isinstance(reference_message, dict) and reference_message:
-            runtime_lines.append("引用消息：" + _render_reference_message(reference_message))
+            runtime_lines.append(
+                "引用消息：" + _render_reference_message(reference_message)
+            )
         intent_decision = data.get("intent_decision", {})
         if isinstance(intent_decision, dict) and intent_decision:
-            runtime_lines.append("意图决策：" + json.dumps(intent_decision, ensure_ascii=False))
+            runtime_lines.append(
+                "意图决策：" + json.dumps(intent_decision, ensure_ascii=False)
+            )
         if data.get("memory_conflict_policy"):
             runtime_lines.append(f"记忆冲突策略：{data['memory_conflict_policy']}")
         if data.get("summary_policy"):
             runtime_lines.append(f"摘要策略：{data['summary_policy']}")
         if context.extra_notes:
-            runtime_lines.append("额外提示：" + "；".join(note for note in context.extra_notes if note))
-        runtime_lines.append("冲突优先级：当前消息优先；不要让旧记忆或旧画像覆盖当前明确表达。")
+            runtime_lines.append(
+                "额外提示：" + "；".join(note for note in context.extra_notes if note)
+            )
+        runtime_lines.append(
+            "冲突优先级：当前消息优先；不要让旧记忆或旧画像覆盖当前明确表达。"
+        )
         if runtime_lines:
             sections.append("\n".join(runtime_lines))
 
@@ -103,7 +123,9 @@ class PromptBuilder:
         if user_profile_md:
             sections.append("用户画像：\n" + user_profile_md)
         group_profile_md = str(data.get("group_profile_md", "")).strip()
-        if group_profile_md and bool(data.get("current_message", {}).get("is_group", False)):
+        if group_profile_md and bool(
+            data.get("current_message", {}).get("is_group", False)
+        ):
             sections.append("群画像：\n" + group_profile_md)
         chat_summary = str(data.get("chat_summary", "")).strip()
         if chat_summary:
@@ -114,6 +136,12 @@ class PromptBuilder:
         recent_turns = _render_recent_turns(data.get("recent_turns", []))
         if recent_turns:
             sections.append("最近对话：\n" + recent_turns)
+        # 搜索结果（新增）
+        search_result = data.get("search_result")
+        if search_result:
+            search_section = _render_search_result(search_result)
+            if search_section:
+                sections.append(search_section)
         current = data.get("current_message", {})
         sections.append("当前消息：\n" + _render_current_message(current))
         sections.append(
@@ -163,7 +191,10 @@ def _render_items(title: str, items: Any, *, limit: int) -> str:
     rendered: list[str] = []
     for item in items[:limit]:
         if isinstance(item, dict):
-            rendered.append("- " + ", ".join(f"{k}={v}" for k, v in item.items() if v not in (None, "")))
+            rendered.append(
+                "- "
+                + ", ".join(f"{k}={v}" for k, v in item.items() if v not in (None, ""))
+            )
         else:
             rendered.append(f"- {item}")
     return f"{title}:\n" + "\n".join(rendered)
@@ -184,7 +215,9 @@ def _render_recent_turns(turns: Any) -> str:
     for item in turns:
         if not isinstance(item, dict):
             continue
-        display_name = str(item.get("sender_display_name") or item.get("user_id") or "").strip()
+        display_name = str(
+            item.get("sender_display_name") or item.get("user_id") or ""
+        ).strip()
         role = str(item.get("role", "")).strip()
         content = str(item.get("content", "")).strip()
         if display_name:
@@ -205,7 +238,9 @@ def _render_reference_message(message: dict[str, Any]) -> str:
     Returns:
         格式化的引用消息文本
     """
-    sender = str(message.get("metadata", {}).get("sender_display_name", "") or "").strip()
+    sender = str(
+        message.get("metadata", {}).get("sender_display_name", "") or ""
+    ).strip()
     text = str(message.get("content", "")).strip()
     message_id = str(message.get("message_id", "")).strip()
     parts = []
@@ -230,6 +265,72 @@ def _render_banter_level_section(banter_level: str) -> str:
     return f"当前调侃强度：{banter_level}" + (f"。{hint}" if hint else "")
 
 
+def _render_search_result(result: dict[str, Any]) -> str:
+    """渲染搜索结果为提示词段落。
+
+    Args:
+        result: 搜索结果字典
+
+    Returns:
+        格式化的搜索结果文本，如果搜索失败则返回空字符串
+    """
+    if not result.get("ok", False):
+        # 搜索失败，返回提示信息
+        message = result.get("message", "")
+        if message:
+            return f"【搜索结果】\n{message}\n回答时不要说自己不能联网，直接说明没有搜到可靠结果或当前信息不足。"
+        return ""
+
+    result_type = result.get("type", "")
+    query = result.get("query", "")
+    provider = result.get("provider", "")
+    results = result.get("results", [])
+
+    if result_type == "web_extract":
+        # URL 抽取结果
+        content = ""
+        for item in results:
+            content = str(item.get("content", ""))
+            break
+        # 限制抽取内容长度
+        if len(content) > 4000:
+            content = content[:4000] + "..."
+        return f"【网页正文抽取】\nURL: {query}\n正文摘录:\n{content}"
+
+    # web_search 结果
+    lines = [f"【联网搜索结果】\nquery: {query}\nprovider: {provider}\n"]
+    for i, item in enumerate(results[:5], 1):
+        title = str(item.get("title", "") or item.get("name", ""))
+        href = str(item.get("href", "") or item.get("url", ""))
+        abstract = str(
+            item.get("abstract", "")
+            or item.get("snippet", "")
+            or item.get("content", "")
+        )
+        # 限制摘要长度
+        if len(abstract) > 500:
+            abstract = abstract[:500] + "..."
+        lines.append(f"{i}. {title}")
+        if href:
+            lines.append(f"   URL: {href}")
+        if abstract:
+            lines.append(f"   摘要: {abstract}")
+        lines.append("")
+
+    search_text = "\n".join(lines)
+    # 搜索规则提示
+    search_text += (
+        "\n搜索结果使用规则：\n"
+        "1. 必须优先依据搜索结果回答。\n"
+        "2. 涉及时效性问题时，不能只依赖模型旧知识。\n"
+        "3. 搜索结果不足、失败、冲突时，必须说明不确定。\n"
+        "4. 不要编造不存在的来源。\n"
+        "5. 回答里尽量带上来源标题或 URL。\n"
+        "6. 群聊场景保持简洁，除非用户明确要求详细解释。"
+    )
+    return search_text
+
+
 def _join_with_cap(sections: list[str], max_chars: int) -> str:
     """合并提示词段落并限制总长度。
 
@@ -252,7 +353,10 @@ def _join_with_cap(sections: list[str], max_chars: int) -> str:
     head = parts[:-2] if len(parts) >= 2 else []
     tail_text = "\n\n".join(tail)
     head_text = "\n\n".join(head)
-    if len(head_text) + len(tail_text) + (2 if head_text and tail_text else 0) <= max_chars:
+    if (
+        len(head_text) + len(tail_text) + (2 if head_text and tail_text else 0)
+        <= max_chars
+    ):
         return "\n\n".join(parts)
     reserve = len(tail_text) + (2 if head_text and tail_text else 0)
     available = max(0, max_chars - reserve)

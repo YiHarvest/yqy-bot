@@ -3,6 +3,7 @@
 
 验证 memory_utils.py 和 worker.py 的核心功能。
 """
+
 from __future__ import annotations
 
 import sys
@@ -15,7 +16,6 @@ from yqy_bot.background.memory_utils import (
     normalize_message_text,
     is_noise_memory,
     detect_roleplay,
-    is_explicit_remember,
     detect_explicit_memory_request,
     classify_explicit_memory,
     calculate_memory_score,
@@ -39,14 +39,22 @@ def test_normalize_message_text():
         # CQ 表情
         ("[CQ:face,id=123]", "[表情]", "CQ 表情转换"),
         # CQ 文件（只取文件名）
-        ("[CQ:file,file=海河碎尸案设计稿.pdf,file_id=xxx]", "[文件：海河碎尸案设计稿.pdf]", "CQ 文件转换"),
+        (
+            "[CQ:file,file=海河碎尸案设计稿.pdf,file_id=xxx]",
+            "[文件：海河碎尸案设计稿.pdf]",
+            "CQ 文件转换",
+        ),
         # CQ 文件带额外参数后会被清理
         ("[CQ:file,file=test.pdf,other_param]", "[文件：test.pdf]", "CQ 文件带参数"),
         # CQ @
         ("[CQ:at,qq=12345]", "@用户12345", "CQ @ 转换"),
         ("[CQ:at,qq=all]", "@全体成员", "CQ @全体转换"),
         # 混合内容
-        ("你好[CQ:face,id=123]这是图片[CQ:image,file=x.jpg]", "你好[表情]这是图片[图片]", "混合内容"),
+        (
+            "你好[CQ:face,id=123]这是图片[CQ:image,file=x.jpg]",
+            "你好[表情]这是图片[图片]",
+            "混合内容",
+        ),
         # 原始文本保留
         ("用户真实文本内容", "用户真实文本内容", "原始文本保留"),
         # 多余空白
@@ -252,7 +260,9 @@ def test_normalize_topic_tags():
     for content, expected_keywords, desc in cases:
         topics = normalize_topic_tags(content)
         # 检查是否包含预期关键词（宽松匹配）
-        has_expected = any(kw in str(topics) for kw in expected_keywords) or len(topics) > 0
+        has_expected = (
+            any(kw in str(topics) for kw in expected_keywords) or len(topics) > 0
+        )
         if has_expected and len(topics) <= 5:
             print(f"  ✓ {desc}: '{content[:40]}...' -> {topics}")
             passed += 1
@@ -295,7 +305,7 @@ def test_filter_profile_keys():
             user_passed = False
 
     if user_passed:
-        print(f"  ✓ 用户画像白名单过滤正确")
+        print("  ✓ 用户画像白名单过滤正确")
 
     # 测试群画像过滤
     group_profile_raw = {
@@ -323,7 +333,7 @@ def test_filter_profile_keys():
             group_passed = False
 
     if group_passed:
-        print(f"  ✓ 群画像白名单过滤正确")
+        print("  ✓ 群画像白名单过滤正确")
 
     print(f"  结果: {2 if user_passed and group_passed else 0}/2 通过")
     return user_passed and group_passed
@@ -349,7 +359,9 @@ def test_deduplicate_memory():
 
     passed = 0
     for content, should_skip, desc in cases:
-        is_skip, reason = deduplicate_memory(content, existing_memories, user_id="user1")
+        is_skip, reason = deduplicate_memory(
+            content, existing_memories, user_id="user1"
+        )
         if is_skip == should_skip:
             print(f"  ✓ {desc}: '{content}' -> skip={is_skip}")
             passed += 1
@@ -548,29 +560,41 @@ def test_classify_explicit_memory():
         # 检查 kind
         if "kind" in expected:
             if result.get("kind") != expected["kind"]:
-                checks.append(f"kind={result.get('kind')} (expected={expected['kind']})")
+                checks.append(
+                    f"kind={result.get('kind')} (expected={expected['kind']})"
+                )
                 is_pass = False
         elif "kind_in" in expected:
             if result.get("kind") not in expected["kind_in"]:
-                checks.append(f"kind={result.get('kind')} (expected in {expected['kind_in']})")
+                checks.append(
+                    f"kind={result.get('kind')} (expected in {expected['kind_in']})"
+                )
                 is_pass = False
         elif "not_kind" in expected:
             if result.get("kind") == expected["not_kind"]:
-                checks.append(f"kind={result.get('kind')} (should not be {expected['not_kind']})")
+                checks.append(
+                    f"kind={result.get('kind')} (should not be {expected['not_kind']})"
+                )
                 is_pass = False
 
         # 检查 score
         if "score" in expected:
             if result.get("score") != expected["score"]:
-                checks.append(f"score={result.get('score')} (expected={expected['score']})")
+                checks.append(
+                    f"score={result.get('score')} (expected={expected['score']})"
+                )
                 is_pass = False
         elif "score_min" in expected:
             if result.get("score", 0) < expected["score_min"]:
-                checks.append(f"score={result.get('score')} (< {expected['score_min']})")
+                checks.append(
+                    f"score={result.get('score')} (< {expected['score_min']})"
+                )
                 is_pass = False
         elif "score_max" in expected:
             if result.get("score", 1) > expected["score_max"]:
-                checks.append(f"score={result.get('score')} (> {expected['score_max']})")
+                checks.append(
+                    f"score={result.get('score')} (> {expected['score_max']})"
+                )
                 is_pass = False
 
         # 检查 content_keyword
@@ -583,12 +607,16 @@ def test_classify_explicit_memory():
         if is_pass:
             print(f"  ✓ {desc}")
             print(f"    输入: '{input_text}'")
-            print(f"    结果: kind={result.get('kind')}, score={result.get('score')}, content='{result.get('content', '')[:60]}'")
+            print(
+                f"    结果: kind={result.get('kind')}, score={result.get('score')}, content='{result.get('content', '')[:60]}'"
+            )
             passed += 1
         else:
             print(f"  ✗ {desc}")
             print(f"    输入: '{input_text}'")
-            print(f"    结果: kind={result.get('kind')}, score={result.get('score')}, checks={', '.join(checks)}")
+            print(
+                f"    结果: kind={result.get('kind')}, score={result.get('score')}, checks={', '.join(checks)}"
+            )
 
     print(f"  结果: {passed}/{len(cases)} 通过")
     return passed == len(cases)

@@ -15,7 +15,14 @@ class NapCatAPIError(RuntimeError):
     当 NapCat API 请求失败或返回错误状态时抛出此异常。
     """
 
-    def __init__(self, message: str, *, path: str, status: str | None = None, retcode: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        path: str,
+        status: str | None = None,
+        retcode: int | None = None,
+    ) -> None:
         """初始化 NapCat API 错误。
 
         Args:
@@ -92,7 +99,9 @@ class NapCatClient:
                 raw = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             raw = exc.read().decode("utf-8", errors="replace")
-            LOGGER.debug("NapCat HTTP error path=%s status=%s body=%s", url, exc.code, raw)
+            LOGGER.debug(
+                "NapCat HTTP error path=%s status=%s body=%s", url, exc.code, raw
+            )
             try:
                 return json.loads(raw)
             except json.JSONDecodeError as err:
@@ -104,7 +113,9 @@ class NapCatClient:
         try:
             return json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise NapCatAPIError(f"NapCat returned invalid JSON from {url}", path=url) from exc
+            raise NapCatAPIError(
+                f"NapCat returned invalid JSON from {url}", path=url
+            ) from exc
 
     def _check_response(self, path: str, payload: dict[str, Any]) -> None:
         """检查 API 响应状态，确认请求成功。
@@ -118,8 +129,20 @@ class NapCatClient:
         """
         status = str(payload.get("status", ""))
         retcode = payload.get("retcode")
-        retcode_int = int(retcode) if isinstance(retcode, int) or str(retcode).isdigit() else None
+        retcode_int = (
+            int(retcode) if isinstance(retcode, int) or str(retcode).isdigit() else None
+        )
         if status and status != "ok":
-            raise NapCatAPIError(f"NapCat request failed: {path}", path=path, status=status, retcode=retcode_int)
+            raise NapCatAPIError(
+                f"NapCat request failed: {path}",
+                path=path,
+                status=status,
+                retcode=retcode_int,
+            )
         if retcode_int is not None and retcode_int != 0:
-            raise NapCatAPIError(f"NapCat request failed: {path}", path=path, status=status or None, retcode=retcode_int)
+            raise NapCatAPIError(
+                f"NapCat request failed: {path}",
+                path=path,
+                status=status or None,
+                retcode=retcode_int,
+            )

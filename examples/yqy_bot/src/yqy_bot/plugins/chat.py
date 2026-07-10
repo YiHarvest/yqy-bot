@@ -64,7 +64,9 @@ class ChatPlugin(Plugin):
                 # 简单查询测试连接
                 pipeline.bundle.database.fetchone("SELECT 1")
             except Exception as e:
-                LOGGER.warning("[ChatPlugin] 数据库连接已关闭，重新创建 pipeline: %s", e)
+                LOGGER.warning(
+                    "[ChatPlugin] 数据库连接已关闭，重新创建 pipeline: %s", e
+                )
                 need_recreate = True
         else:
             need_recreate = True

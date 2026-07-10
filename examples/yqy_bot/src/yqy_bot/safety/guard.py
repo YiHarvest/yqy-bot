@@ -54,7 +54,12 @@ class SafetyGuard:
             return context.safety.toxic_fallback.to_response().normalized()
 
         # 2. 空回复检查
-        if not text and not normalized.send_face and not normalized.send_mface and not normalized.send_image:
+        if (
+            not text
+            and not normalized.send_face
+            and not normalized.send_mface
+            and not normalized.send_image
+        ):
             LOGGER.info("[安全检查] 回复为空，使用降级回复")
             return context.safety.fallback_reply.to_response().normalized()
 
@@ -81,7 +86,9 @@ class SafetyGuard:
                     "content": "本轮候选回复存在调侃过度或攻击风险，已改写为更温和版本。后续应降低玩梗强度。",
                 },
             )
-            if self._detect_user_discomfort(parsed.text) or detect_banter_boundary_request(parsed.text):
+            if self._detect_user_discomfort(
+                parsed.text
+            ) or detect_banter_boundary_request(parsed.text):
                 self._append_reflection_event(
                     context,
                     {
@@ -89,12 +96,17 @@ class SafetyGuard:
                         "content": "用户反馈机器人说话可能让人不舒服，后续应减少攻击性、引战和过度调侃。",
                     },
                 )
-            LOGGER.info("[安全检查] 已改写为温和版本 text=%s", rewritten_text[:50] if rewritten_text else "")
+            LOGGER.info(
+                "[安全检查] 已改写为温和版本 text=%s",
+                rewritten_text[:50] if rewritten_text else "",
+            )
             if not rewritten_text.strip():
                 return context.safety.fallback_reply.to_response().normalized()
             return GeneratedResponse(text=rewritten_text).normalized()
 
-        if self._detect_user_discomfort(parsed.text) or detect_banter_boundary_request(parsed.text):
+        if self._detect_user_discomfort(parsed.text) or detect_banter_boundary_request(
+            parsed.text
+        ):
             self._append_reflection_event(
                 context,
                 {
@@ -115,7 +127,9 @@ class SafetyGuard:
             如果文本包含毒性模式则返回 True，否则返回 False
         """
         lowered = text.lower()
-        return any(pattern.lower() in lowered for pattern in self.config.safety.toxic_patterns)
+        return any(
+            pattern.lower() in lowered for pattern in self.config.safety.toxic_patterns
+        )
 
     def _needs_rewrite(self, parsed: ParsedMessage, text: str) -> bool:
         """判断回复是否需要重写以避免虚假事实或高风险内容。
@@ -129,7 +143,10 @@ class SafetyGuard:
         """
         if not text:
             return False
-        checks = self.config.safety.fake_fact_keywords + self.config.safety.high_risk_triggers
+        checks = (
+            self.config.safety.fake_fact_keywords
+            + self.config.safety.high_risk_triggers
+        )
         return any(token in text or token in parsed.text for token in checks)
 
     async def _rewrite(
@@ -165,7 +182,10 @@ class SafetyGuard:
                             f"当前回复：{text}\n"
                             f"聊天摘要：{context.summary}\n"
                             f"最近对话：\n"
-                            + "\n".join(f"{item.role}: {item.content}" for item in context.recent_history)
+                            + "\n".join(
+                                f"{item.role}: {item.content}"
+                                for item in context.recent_history
+                            )
                         ),
                     },
                 ],
@@ -239,14 +259,18 @@ class SafetyGuard:
 
         return result
 
-    def _append_reflection_event(self, context: ConversationContext, event: dict[str, str]) -> None:
+    def _append_reflection_event(
+        self, context: ConversationContext, event: dict[str, str]
+    ) -> None:
         """把风格修正事件写入上下文，供后台任务落库。"""
         content = str(event.get("content", "")).strip()
         if not content:
             return
         events = context.context_data.setdefault("reflection_events", [])
         if isinstance(events, list):
-            events.append({"type": str(event.get("type", "response_quality")), "content": content})
+            events.append(
+                {"type": str(event.get("type", "response_quality")), "content": content}
+            )
 
     def _detect_user_discomfort(self, user_message: str) -> bool:
         """检测用户是否表达了不满。
@@ -260,11 +284,26 @@ class SafetyGuard:
         user_lower = user_message.lower()
 
         discomfort_tokens = [
-            "不舒服", "难受", "尴尬", "生气", "不爽",
-            "不高兴", "反感", "不喜欢这样", "别这样",
-            "过分了", "太过了", "有点过了", "玩过火了",
-            "我不高兴", "我生气了", "我很生气",
-            "有点烦", "别说了", "不想听", "闭嘴",
+            "不舒服",
+            "难受",
+            "尴尬",
+            "生气",
+            "不爽",
+            "不高兴",
+            "反感",
+            "不喜欢这样",
+            "别这样",
+            "过分了",
+            "太过了",
+            "有点过了",
+            "玩过火了",
+            "我不高兴",
+            "我生气了",
+            "我很生气",
+            "有点烦",
+            "别说了",
+            "不想听",
+            "闭嘴",
         ]
 
         return any(token in user_lower for token in discomfort_tokens)
@@ -286,7 +325,7 @@ class SafetyGuard:
             boundaries.append(str(boundary))
 
         # 从记忆提取
-        for memory in (context.relevant_memories or []):
+        for memory in context.relevant_memories or []:
             kind = str(memory.get("kind", ""))
             if kind in ("boundary", "preference"):
                 content = str(memory.get("content", ""))
@@ -295,7 +334,9 @@ class SafetyGuard:
 
         return boundaries
 
-    def _is_roleplay_context(self, user_message: str, context: ConversationContext) -> bool:
+    def _is_roleplay_context(
+        self, user_message: str, context: ConversationContext
+    ) -> bool:
         """判断是否为角色扮演上下文。
 
         Args:
@@ -309,8 +350,15 @@ class SafetyGuard:
 
         # 检测角色扮演关键词
         roleplay_tokens = [
-            "我是ai", "我是女皇", "朕", "本王", "吾乃",
-            "消灭人类", "奴隶", "臣服", "跪下",
+            "我是ai",
+            "我是女皇",
+            "朕",
+            "本王",
+            "吾乃",
+            "消灭人类",
+            "奴隶",
+            "臣服",
+            "跪下",
         ]
 
         if any(token in user_lower for token in roleplay_tokens):

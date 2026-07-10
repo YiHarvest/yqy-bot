@@ -19,7 +19,9 @@ def build_message_segments(response: GeneratedResponse) -> list[dict[str, Any]]:
     normalized = response.normalized()
     segments: list[dict[str, Any]] = []
     if normalized.reply_to_message_id:
-        segments.append({"type": "reply", "data": {"id": normalized.reply_to_message_id}})
+        segments.append(
+            {"type": "reply", "data": {"id": normalized.reply_to_message_id}}
+        )
     if normalized.at_user_id:
         segments.append({"type": "at", "data": {"qq": normalized.at_user_id}})
     if normalized.text:
@@ -42,11 +44,24 @@ def normalize_mface_payload(payload: dict[str, Any]) -> dict[str, Any]:
         payload: 原始小表情载荷字典
 
     Returns:
-        规范化后的小表情载荷字典，所有字段均为字符串类型
+        规范化后的小表情载荷字典
+        注意：emoji_package_id 必须是数字类型，emoji_id/key/summary 是字符串
     """
+    emoji_package_id_raw = payload.get("emoji_package_id", 0)
+    # emoji_package_id 必须是数字类型
+    emoji_package_id = 0
+    if isinstance(emoji_package_id_raw, (int, float)):
+        emoji_package_id = int(emoji_package_id_raw)
+    elif isinstance(emoji_package_id_raw, str) and emoji_package_id_raw.strip():
+        try:
+            emoji_package_id = int(emoji_package_id_raw.strip())
+        except ValueError:
+            # 无法转换为数字时使用默认值
+            emoji_package_id = 0
+
     return {
         "emoji_id": str(payload.get("emoji_id", "")).strip(),
-        "emoji_package_id": str(payload.get("emoji_package_id", "")).strip(),
+        "emoji_package_id": emoji_package_id,
         "key": str(payload.get("key", "")).strip(),
         "summary": str(payload.get("summary", "")).strip(),
     }

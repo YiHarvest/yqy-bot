@@ -4,12 +4,99 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-
 DEFAULT_GROUP_TRIGGER_KEYWORDS = ["YHarvest", "机器人"]
 DEFAULT_PERSONA_TONE = ["自然口语化", "短句为主", "不硬拗梗"]
 DEFAULT_PERSONA_RULES = ["不要输出 CQ 码", "需要表情时要发送表情包"]
-DEFAULT_LOW_INFO_SKIP_KEYWORDS = ["哈哈", "哈哈哈", "在吗", "晚安", "早安", "收到", "OK", "ok", "好的"]
+DEFAULT_LOW_INFO_SKIP_KEYWORDS = [
+    "哈哈",
+    "哈哈哈",
+    "在吗",
+    "晚安",
+    "早安",
+    "收到",
+    "OK",
+    "ok",
+    "好的",
+]
 DEFAULT_QUESTION_TOKENS = ["?", "？", "吗", "呢"]
+
+# 搜索触发关键词
+DEFAULT_SEARCH_TRIGGER_KEYWORDS = [
+    "搜一下",
+    "查一下",
+    "搜索",
+    "帮我查",
+    "帮我找",
+    "联网查",
+    "最新",
+    "现在",
+    "今天",
+    "今年",
+    "新闻",
+    "价格",
+    "版本",
+    "官网",
+    "文档",
+    "PyPI",
+    "GitHub",
+    "release",
+    "issue",
+    "报错",
+]
+
+
+@dataclass(slots=True)
+class SearchMCPSettings:
+    """搜索 MCP 工具配置。"""
+
+    enabled: bool = False
+    command: str = "search-engine-tool-mcp"
+    provider: str = "auto"
+    max_results: int = 5
+    timeout_seconds: float = 25.0
+
+    @classmethod
+    def from_mapping(cls, payload: dict[str, Any] | None) -> "SearchMCPSettings":
+        """从字典对象创建 SearchMCPSettings 实例。
+
+        环境变量优先级高于配置文件。
+
+        Args:
+            payload: 配置字典，可选
+
+        Returns:
+            SearchMCPSettings 实例
+        """
+        data = dict(payload or {})
+        env_enabled = os.getenv("SEARCH_MCP_ENABLED", "")
+        # 使用字段默认值
+        default_enabled = False
+        default_command = "search-engine-tool-mcp"
+        default_provider = "auto"
+        default_max_results = 5
+        default_timeout = 25.0
+        return cls(
+            enabled=bool(
+                env_enabled.lower() in ("true", "1", "yes")
+                if env_enabled
+                else data.get("enabled", default_enabled)
+            ),
+            command=str(
+                os.getenv("SEARCH_MCP_COMMAND") or data.get("command", default_command)
+            ),
+            provider=str(
+                os.getenv("SEARCH_MCP_PROVIDER")
+                or data.get("provider", default_provider)
+            ),
+            max_results=int(
+                os.getenv("SEARCH_MCP_MAX_RESULTS")
+                or data.get("max_results", default_max_results)
+            ),
+            timeout_seconds=float(
+                os.getenv("SEARCH_MCP_TIMEOUT_SECONDS")
+                or data.get("timeout_seconds", default_timeout)
+            ),
+        )
 
 
 @dataclass(slots=True)
@@ -32,10 +119,16 @@ class NapCatSettings:
         data = dict(payload or {})
         env_access_token = os.getenv("NAPCAT_ACCESS_TOKEN") or ""
         return cls(
-            http_base_url=str(os.getenv("NAPCAT_HTTP_BASE_URL") or data.get("http_base_url", cls.http_base_url)),
-            access_token=str(env_access_token or data.get("access_token", cls.access_token)),
+            http_base_url=str(
+                os.getenv("NAPCAT_HTTP_BASE_URL")
+                or data.get("http_base_url", cls.http_base_url)
+            ),
+            access_token=str(
+                env_access_token or data.get("access_token", cls.access_token)
+            ),
             timeout_seconds=float(
-                os.getenv("NAPCAT_TIMEOUT_SECONDS") or data.get("timeout_seconds", cls.timeout_seconds)
+                os.getenv("NAPCAT_TIMEOUT_SECONDS")
+                or data.get("timeout_seconds", cls.timeout_seconds)
             ),
             custom_face_count=int(data.get("custom_face_count", cls.custom_face_count)),
         )
@@ -64,13 +157,24 @@ class BotContextSettings:
         """
         data = dict(payload or {})
         return cls(
-            enable_history_backfill=bool(data.get("enable_history_backfill", cls.enable_history_backfill)),
-            history_backfill_cooldown_seconds=int(
-                data.get("history_backfill_cooldown_seconds", cls.history_backfill_cooldown_seconds)
+            enable_history_backfill=bool(
+                data.get("enable_history_backfill", cls.enable_history_backfill)
             ),
-            group_recent_turns_min=int(data.get("group_recent_turns_min", cls.group_recent_turns_min)),
-            private_recent_turns_limit=int(data.get("private_recent_turns_limit", cls.private_recent_turns_limit)),
-            group_recent_turns_limit=int(data.get("group_recent_turns_limit", cls.group_recent_turns_limit)),
+            history_backfill_cooldown_seconds=int(
+                data.get(
+                    "history_backfill_cooldown_seconds",
+                    cls.history_backfill_cooldown_seconds,
+                )
+            ),
+            group_recent_turns_min=int(
+                data.get("group_recent_turns_min", cls.group_recent_turns_min)
+            ),
+            private_recent_turns_limit=int(
+                data.get("private_recent_turns_limit", cls.private_recent_turns_limit)
+            ),
+            group_recent_turns_limit=int(
+                data.get("group_recent_turns_limit", cls.group_recent_turns_limit)
+            ),
             memory_limit=int(data.get("memory_limit", cls.memory_limit)),
             reflection_limit=int(data.get("reflection_limit", cls.reflection_limit)),
             prompt_max_chars=int(data.get("prompt_max_chars", cls.prompt_max_chars)),
@@ -91,7 +195,9 @@ class BotSettings:
     flood_threshold: int = 20
     background_batch_size: int = 6
     background_flush_seconds: float = 12.0
-    group_trigger_keywords: list[str] = field(default_factory=lambda: ["YHarvest", "机器人"])
+    group_trigger_keywords: list[str] = field(
+        default_factory=lambda: ["YHarvest", "机器人"]
+    )
     private_trigger_keywords: list[str] = field(default_factory=list)
     blocked_group_ids: list[str] = field(default_factory=list)
     blocked_user_ids: list[str] = field(default_factory=list)
@@ -101,6 +207,7 @@ class BotSettings:
     default_group_mode: str = "quiet"
     napcat: NapCatSettings = field(default_factory=NapCatSettings)
     context: BotContextSettings = field(default_factory=BotContextSettings)
+    search_mcp: SearchMCPSettings = field(default_factory=SearchMCPSettings)
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any] | None) -> "BotSettings":
@@ -116,7 +223,9 @@ class BotSettings:
         return cls(
             database_path=str(data.get("database_path", cls.database_path)),
             max_history_turns=int(data.get("max_history_turns", cls.max_history_turns)),
-            long_context_turns=int(data.get("long_context_turns", cls.long_context_turns)),
+            long_context_turns=int(
+                data.get("long_context_turns", cls.long_context_turns)
+            ),
             private_cooldown_seconds=int(
                 data.get("private_cooldown_seconds", cls.private_cooldown_seconds)
             ),
@@ -137,7 +246,10 @@ class BotSettings:
                 data.get("background_flush_seconds", cls.background_flush_seconds)
             ),
             group_trigger_keywords=[
-                str(item) for item in data.get("group_trigger_keywords", DEFAULT_GROUP_TRIGGER_KEYWORDS)
+                str(item)
+                for item in data.get(
+                    "group_trigger_keywords", DEFAULT_GROUP_TRIGGER_KEYWORDS
+                )
             ],
             private_trigger_keywords=[
                 str(item) for item in data.get("private_trigger_keywords", [])
@@ -151,9 +263,14 @@ class BotSettings:
             allow_group_short_reply=bool(
                 data.get("allow_group_short_reply", cls.allow_group_short_reply)
             ),
-            default_group_mode=str(data.get("default_group_mode", cls.default_group_mode)),
+            default_group_mode=str(
+                data.get("default_group_mode", cls.default_group_mode)
+            ),
             napcat=NapCatSettings.from_mapping(data.get("napcat", {})),
             context=BotContextSettings.from_mapping(data.get("context", {})),
+            search_mcp=SearchMCPSettings.from_mapping(
+                data.get("search_mcp", data.get("tools", {}).get("search_mcp", {}))
+            ),
         )
 
 
@@ -191,7 +308,9 @@ class PersonaSettings:
             memory_rules=[str(item) for item in data.get("memory_rules", [])],
             reflection_rules=[str(item) for item in data.get("reflection_rules", [])],
             tone=[str(item) for item in data.get("tone", DEFAULT_PERSONA_TONE)],
-            reply_rules=[str(item) for item in data.get("reply_rules", DEFAULT_PERSONA_RULES)],
+            reply_rules=[
+                str(item) for item in data.get("reply_rules", DEFAULT_PERSONA_RULES)
+            ],
             examples=dict(data.get("examples", {})),
             output_schema=[str(item) for item in data.get("output_schema", [])],
         )
@@ -232,10 +351,22 @@ class SafetySettings:
     memory_rules: list[str] = field(default_factory=list)
     reflection_rules: list[str] = field(default_factory=list)
     low_info_skip_keywords: list[str] = field(
-        default_factory=lambda: ["哈哈", "哈哈哈", "在吗", "晚安", "早安", "收到", "OK", "ok", "好的"]
+        default_factory=lambda: [
+            "哈哈",
+            "哈哈哈",
+            "在吗",
+            "晚安",
+            "早安",
+            "收到",
+            "OK",
+            "ok",
+            "好的",
+        ]
     )
     low_info_max_chars: int = 8
-    question_mark_tokens: list[str] = field(default_factory=lambda: ["?", "？", "吗", "呢"])
+    question_mark_tokens: list[str] = field(
+        default_factory=lambda: ["?", "？", "吗", "呢"]
+    )
     fake_fact_keywords: list[str] = field(default_factory=list)
     high_risk_triggers: list[str] = field(default_factory=list)
     toxic_patterns: list[str] = field(default_factory=list)
@@ -244,7 +375,7 @@ class SafetySettings:
     rewrite_prompt: str = (
         "下面这句回复包含没有依据的过去经历或具体事实，请删除所有无依据细节，只保留基于当前用户消息的轻微调侃。"
         "不要提过去，不要提具体时间、次数、地点、外貌、红包、聊天记录。最多一句话，返回 JSON："
-        "{\"text\":\"重写后的回复\", \"face_id\":\"\", \"send_meme\":false}"
+        '{"text":"重写后的回复", "face_id":"", "send_meme":false}'
     )
 
     @classmethod
@@ -265,14 +396,24 @@ class SafetySettings:
             memory_rules=[str(item) for item in data.get("memory_rules", [])],
             reflection_rules=[str(item) for item in data.get("reflection_rules", [])],
             low_info_skip_keywords=[
-                str(item) for item in data.get("low_info_skip_keywords", DEFAULT_LOW_INFO_SKIP_KEYWORDS)
+                str(item)
+                for item in data.get(
+                    "low_info_skip_keywords", DEFAULT_LOW_INFO_SKIP_KEYWORDS
+                )
             ],
-            low_info_max_chars=int(data.get("low_info_max_chars", cls.low_info_max_chars)),
+            low_info_max_chars=int(
+                data.get("low_info_max_chars", cls.low_info_max_chars)
+            ),
             question_mark_tokens=[
-                str(item) for item in data.get("question_mark_tokens", DEFAULT_QUESTION_TOKENS)
+                str(item)
+                for item in data.get("question_mark_tokens", DEFAULT_QUESTION_TOKENS)
             ],
-            fake_fact_keywords=[str(item) for item in data.get("fake_fact_keywords", [])],
-            high_risk_triggers=[str(item) for item in data.get("high_risk_triggers", [])],
+            fake_fact_keywords=[
+                str(item) for item in data.get("fake_fact_keywords", [])
+            ],
+            high_risk_triggers=[
+                str(item) for item in data.get("high_risk_triggers", [])
+            ],
             toxic_patterns=[str(item) for item in data.get("toxic_patterns", [])],
             toxic_fallback=SafetyFallback(**_coerce_fallback(toxic_fallback)),
             fallback_reply=SafetyFallback(**_coerce_fallback(fallback_reply)),
@@ -404,6 +545,36 @@ class IntentDecision:
     confidence: float = 0.0
     reply_length: str = "normal"
     notes: str = ""
+    # 搜索相关字段
+    need_search: bool = False
+    search_query: str = ""
+    need_extract: bool = False
+    extract_url: str = ""
+    search_reason: str = ""
+
+
+@dataclass(slots=True)
+class SearchDecision:
+    """搜索决策对象，包含是否需要搜索以及搜索参数。"""
+
+    need_search: bool = False
+    search_query: str = ""
+    need_extract: bool = False
+    extract_url: str = ""
+    reason: str = ""
+
+
+@dataclass(slots=True)
+class SearchResult:
+    """搜索结果对象，包含搜索返回的数据或错误信息。"""
+
+    ok: bool = False
+    type: str = ""  # "web_search" or "web_extract"
+    query: str = ""
+    provider: str = ""
+    results: list[dict[str, Any]] = field(default_factory=list)
+    error: str = ""
+    message: str = ""
 
 
 @dataclass(slots=True)

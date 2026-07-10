@@ -45,7 +45,11 @@ class IntentRouter:
                 notes="superuser",
             )
         # 对于简单消息，跳过 LLM 调用，直接使用启发式规则
-        if not gate.allow or not self.llm_router.available("intent") or self._is_simple_message(parsed, gate):
+        if (
+            not gate.allow
+            or not self.llm_router.available("intent")
+            or self._is_simple_message(parsed, gate)
+        ):
             LOGGER.info(
                 "[意图识别] chat_key=%s user_id=%s 方式=heuristic skip_llm=%s gate_allow=%s should_reply=%s reply_style=%s",
                 parsed.chat_key,
@@ -105,7 +109,9 @@ class IntentRouter:
         text = parsed.text.strip()
         safety = self.config.safety
         # 低信息量消息
-        low_info = len(text) <= safety.low_info_max_chars or any(keyword in text for keyword in safety.low_info_skip_keywords)
+        low_info = len(text) <= safety.low_info_max_chars or any(
+            keyword in text for keyword in safety.low_info_skip_keywords
+        )
         if low_info:
             return True
         # 被 @ 或回复机器人
@@ -115,10 +121,16 @@ class IntentRouter:
         if any(token in text for token in safety.question_mark_tokens):
             return True
         # 需要推理模型的消息不跳过
-        if any(token in text for token in ("为什么", "怎么", "分析", "解释", "判断", "比较")):
+        if any(
+            token in text
+            for token in ("为什么", "怎么", "分析", "解释", "判断", "比较")
+        ):
             return False
         # 情感类消息不跳过
-        if any(token in text for token in ("难受", "压力", "emo", "烦", "累", "委屈", "想哭")):
+        if any(
+            token in text
+            for token in ("难受", "压力", "emo", "烦", "累", "委屈", "想哭")
+        ):
             return False
         # 私聊普通消息跳过 LLM
         if parsed.is_private:
@@ -139,7 +151,9 @@ class IntentRouter:
         """
         return parsed.user_id in set(self.config.bot.superusers)
 
-    def _heuristic_decision(self, parsed: ParsedMessage, gate: GateDecision) -> IntentDecision:
+    def _heuristic_decision(
+        self, parsed: ParsedMessage, gate: GateDecision
+    ) -> IntentDecision:
         """使用启发式规则判断意图（LLM 不可用时的降级方案）。
 
         注意：门控已在 pipeline._reply_gate 中完成精细判断，
@@ -154,12 +168,17 @@ class IntentRouter:
         """
         text = parsed.text.strip()
         safety = self.config.safety
-        low_info = (
-            len(text) <= safety.low_info_max_chars
-            or any(keyword in text for keyword in safety.low_info_skip_keywords)
+        low_info = len(text) <= safety.low_info_max_chars or any(
+            keyword in text for keyword in safety.low_info_skip_keywords
         )
-        emotional = any(token in text for token in ("难受", "压力", "emo", "烦", "累", "委屈", "想哭"))
-        reasoning = any(token in text for token in ("为什么", "怎么", "分析", "解释", "判断", "比较"))
+        emotional = any(
+            token in text
+            for token in ("难受", "压力", "emo", "烦", "累", "委屈", "想哭")
+        )
+        reasoning = any(
+            token in text
+            for token in ("为什么", "怎么", "分析", "解释", "判断", "比较")
+        )
         # should_reply 直接继承门控判断结果
         should_reply = gate.allow
         # flood 模式下只有显式触发才回复（门控已处理）
@@ -209,8 +228,12 @@ class IntentRouter:
             "text": parsed.text,
             "mentioned_bot": parsed.mentioned_bot,
             "replied_to_bot": parsed.replied_to_bot,
-            "question_mark": any(token in parsed.text for token in self.config.safety.question_mark_tokens),
-            "low_info": len(parsed.text.strip()) <= self.config.safety.low_info_max_chars,
+            "question_mark": any(
+                token in parsed.text
+                for token in self.config.safety.question_mark_tokens
+            ),
+            "low_info": len(parsed.text.strip())
+            <= self.config.safety.low_info_max_chars,
             "fallback": {
                 "should_reply": fallback.should_reply,
                 "reply_style": fallback.reply_style,
@@ -232,7 +255,9 @@ class IntentRouter:
             {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
         ]
 
-    def _merge(self, fallback: IntentDecision, payload: dict[str, object]) -> IntentDecision:
+    def _merge(
+        self, fallback: IntentDecision, payload: dict[str, object]
+    ) -> IntentDecision:
         """合并启发式决策和 LLM 返回的决策结果。
 
         Args:
@@ -244,7 +269,9 @@ class IntentRouter:
         """
         should_reply = _bool(payload.get("should_reply"), fallback.should_reply)
         reply_style = str(payload.get("reply_style") or fallback.reply_style)
-        need_reason_model = _bool(payload.get("need_reason_model"), fallback.need_reason_model)
+        need_reason_model = _bool(
+            payload.get("need_reason_model"), fallback.need_reason_model
+        )
         need_emoji = _bool(payload.get("need_emoji"), fallback.need_emoji)
         confidence = _float(payload.get("confidence"), fallback.confidence)
         reply_length = str(payload.get("reply_length") or fallback.reply_length)

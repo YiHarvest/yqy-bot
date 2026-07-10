@@ -2,13 +2,13 @@
   "database_path": ".iamai/yqy_bot.sqlite3",
   "max_history_turns": 16,
   "long_context_turns": 12,
-  "private_cooldown_seconds": 0.1,
-  "group_cooldown_seconds": 5,
+  "private_cooldown_seconds": 3,
+  "group_cooldown_seconds": 30,
   "group_heat_window_seconds": 300,
-  "quiet_threshold": 3,
-  "active_threshold": 6,
-  "hot_threshold": 12,
-  "flood_threshold": 20,
+  "quiet_threshold": 2,
+  "active_threshold": 5,
+  "hot_threshold": 8,
+  "flood_threshold": 12,
   "background_batch_size": 6,
   "background_flush_seconds": 12.0,
   "group_trigger_keywords": ["YHarvest", "ai", "123", "帮我看看"],
@@ -34,5 +34,12 @@
     "memory_limit": 5,
     "reflection_limit": 2,
     "prompt_max_chars": 8000
+  },
+  "search_mcp": {
+    "enabled": true,
+    "command": "search-engine-tool-mcp",
+    "provider": "auto",
+    "max_results": 5,
+    "timeout_seconds": 25
   }
 }

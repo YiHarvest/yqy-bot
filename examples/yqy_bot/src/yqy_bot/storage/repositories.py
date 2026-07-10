@@ -7,7 +7,6 @@ from typing import Any
 
 from yqy_bot.core.models import (
     ChatHistoryItem,
-    GeneratedResponse,
     GateDecision,
     IntentDecision,
     ParsedMessage,
@@ -115,7 +114,9 @@ class Repositories:
         ]
         return list(reversed(items))
 
-    def find_history_message(self, message_id: str, *, chat_key: str | None = None) -> dict[str, Any] | None:
+    def find_history_message(
+        self, message_id: str, *, chat_key: str | None = None
+    ) -> dict[str, Any] | None:
         """查找指定消息 ID 的历史记录。
 
         Args:
@@ -142,7 +143,9 @@ class Repositories:
         )
         return dict(row) if row is not None else None
 
-    def log_intent(self, parsed: ParsedMessage, gate: GateDecision, intent: IntentDecision) -> None:
+    def log_intent(
+        self, parsed: ParsedMessage, gate: GateDecision, intent: IntentDecision
+    ) -> None:
         """记录意图决策日志到数据库。
 
         Args:
@@ -315,7 +318,12 @@ class Repositories:
                 dirty_count=excluded.dirty_count,
                 updated_at=datetime('now')
             """,
-            (user_id, json_dumps(profile), prompt_md, 0 if dirty_count is None else dirty_count),
+            (
+                user_id,
+                json_dumps(profile),
+                prompt_md,
+                0 if dirty_count is None else dirty_count,
+            ),
         )
 
     def get_group_profile(self, group_id: str) -> dict[str, Any]:
@@ -373,7 +381,9 @@ class Repositories:
             ),
         )
 
-    def bump_group_profile_message_count(self, group_id: str, *, delta: int = 1) -> None:
+    def bump_group_profile_message_count(
+        self, group_id: str, *, delta: int = 1
+    ) -> None:
         """增加群画像的消息计数。
 
         Args:
@@ -385,13 +395,16 @@ class Repositories:
             (group_id,),
         )
         if row is None:
-            self.upsert_group_profile(group_id, {}, "", message_count_since_update=max(delta, 0))
+            self.upsert_group_profile(
+                group_id, {}, "", message_count_since_update=max(delta, 0)
+            )
             return
         self.upsert_group_profile(
             group_id,
             _loads(row["profile_json"]),
             str(row["prompt_md"]),
-            message_count_since_update=int(row["message_count_since_update"] or 0) + delta,
+            message_count_since_update=int(row["message_count_since_update"] or 0)
+            + delta,
         )
 
     def get_summary(self, chat_key: str) -> str:
@@ -584,7 +597,9 @@ class Repositories:
         )
         return [dict(row) for row in rows]
 
-    def get_recent_reflections(self, *, chat_key: str | None = None, limit: int = 2) -> list[dict[str, Any]]:
+    def get_recent_reflections(
+        self, *, chat_key: str | None = None, limit: int = 2
+    ) -> list[dict[str, Any]]:
         """获取最近的反思记录。
 
         Args:
@@ -622,12 +637,10 @@ class Repositories:
             表情记录列表
         """
         if emoji_type is None:
-            rows = self.database.fetchall(
-                """
+            rows = self.database.fetchall("""
                 SELECT emoji_type, face_id, emoji_id, emoji_package_id, key, summary, image_url, raw_json, usage_count
                 FROM emoji_store
-                """
-            )
+                """)
         else:
             rows = self.database.fetchall(
                 """

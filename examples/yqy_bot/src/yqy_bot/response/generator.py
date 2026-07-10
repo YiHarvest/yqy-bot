@@ -18,7 +18,9 @@ class ResponseGenerator:
     llm_router: LLMRouter
     prompt_builder: PromptBuilder = field(default_factory=PromptBuilder)
 
-    async def generate(self, context: ConversationContext, intent: IntentDecision) -> GeneratedResponse:
+    async def generate(
+        self, context: ConversationContext, intent: IntentDecision
+    ) -> GeneratedResponse:
         """生成回复内容，根据意图决定使用推理模型或聊天模型。
 
         Args:
@@ -49,7 +51,12 @@ class ResponseGenerator:
             return fallback
         payload = await self._generate_json(role, context, intent)
         response = self._parse_response(payload)
-        if not response.text and not response.send_face and not response.send_mface and not response.send_image:
+        if (
+            not response.text
+            and not response.send_face
+            and not response.send_mface
+            and not response.send_image
+        ):
             fallback = self._fallback(context, intent)
             LOGGER.info(
                 "[回复生成] chat_key=%s 方式=fallback(empty_result) text=%s",
@@ -112,14 +119,17 @@ class ResponseGenerator:
                             "confidence": intent.confidence,
                         },
                         "history": [
-                            {"role": item.role, "content": item.content} for item in context.recent_history
+                            {"role": item.role, "content": item.content}
+                            for item in context.recent_history
                         ],
                     },
                     ensure_ascii=False,
                 ),
             },
         ]
-        return await self.llm_router.chat_json(role, messages, temperature=0.4, max_tokens=512)
+        return await self.llm_router.chat_json(
+            role, messages, temperature=0.4, max_tokens=512
+        )
 
     def _parse_response(self, payload: dict[str, object]) -> GeneratedResponse:
         """解析 LLM 返回的 JSON 载荷为回复对象。
@@ -144,7 +154,9 @@ class ResponseGenerator:
         )
         return response.normalized()
 
-    def _fallback(self, context: ConversationContext, intent: IntentDecision) -> GeneratedResponse:
+    def _fallback(
+        self, context: ConversationContext, intent: IntentDecision
+    ) -> GeneratedResponse:
         """生成降级回复（LLM 不可用或生成失败时使用）。
 
         Args:

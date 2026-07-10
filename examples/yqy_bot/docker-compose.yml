@@ -16,16 +16,28 @@ services:
     environment:
       UV_PROJECT_ENVIRONMENT: /opt/uv-env
       UV_CACHE_DIR: /root/.cache/uv
+      CARGO_TARGET_DIR: /tmp/iamai-target
       PYTHONUNBUFFERED: "1"
       PYTHONPATH: /workspace/iamai/examples/yqy_bot/src:/workspace/iamai/python
-      NAPCAT_HTTP_BASE_URL: http://host.docker.internal:13000
+      NAPCAT_HTTP_BASE_URL: http://napcat:3000
+      SEARXNG_BASE_URL: http://host.docker.internal:8080
+      SEARCH_MCP_ENABLED: "true"
+      SEARCH_MCP_COMMAND: /opt/uv-env/bin/search-engine-tool-mcp
       TZ: Asia/Shanghai
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
       - "8082:8082"
+    networks:
+      - default
+      - qqbot-net
     restart: unless-stopped
 
 volumes:
   qqbot-uv-cache:
   qqbot-uv-env:
+
+networks:
+  qqbot-net:
+    external: true
+    name: projects_qqbot-net

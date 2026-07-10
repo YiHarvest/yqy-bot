@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.100",
     "uvicorn[standard]",
     "httpx",
+    "search-engine-tool-mcp==0.4.2",
 ]
 
 [tool.uv.sources]

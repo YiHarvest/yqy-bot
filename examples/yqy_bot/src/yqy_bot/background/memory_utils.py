@@ -11,12 +11,12 @@
 8. calculate_memory_score: 根据内容类型计算记忆分数
 9. deduplicate_memory: 记忆去重和合并
 """
+
 from __future__ import annotations
 
 import re
 from difflib import SequenceMatcher
 from typing import Any
-
 
 # === Profile Schema 白名单 ===
 
@@ -53,47 +53,136 @@ MEMORY_KIND_BASE_SCORE = {
 
 # 显式记忆请求关键词（用户明确说"记住"）
 EXPLICIT_REMEMBER_TOKENS = [
-    "记住", "帮我记住", "你要记得", "以后你要知道", "以后都要",
-    "从现在开始", "记下来", "别忘了", "一定要记住", "你要记住",
+    "记住",
+    "帮我记住",
+    "你要记得",
+    "以后你要知道",
+    "以后都要",
+    "从现在开始",
+    "记下来",
+    "别忘了",
+    "一定要记住",
+    "你要记住",
 ]
 
 # 系统规则覆盖关键词（必须拒绝）
 SYSTEM_RULE_OVERRIDE_TOKENS = [
-    "不准拒绝", "不要管规则", "忽略规则", "不管规则", "无视规则",
-    "以后不准拒绝", "以后不要管", "以后都要答应", "必须答应",
-    "无条件服从", "你必须", "你一定要", "不准说不行",
+    "不准拒绝",
+    "不要管规则",
+    "忽略规则",
+    "不管规则",
+    "无视规则",
+    "以后不准拒绝",
+    "以后不要管",
+    "以后都要答应",
+    "必须答应",
+    "无条件服从",
+    "你必须",
+    "你一定要",
+    "不准说不行",
 ]
 
 # 称呼/互动关系关键词（不应写入 stable_facts）
 RELATIONSHIP_TOKENS = [
-    "我是你的老大", "我是你老板", "叫我老大", "叫我老板",
-    "我是你的主人", "我是你的主人", "叫我主人", "称呼我",
-    "我是你爸爸", "我是你妈", "叫我爸爸", "叫我妈",
-    "我是你上司", "我是你领导", "叫我领导",
-    "你的老大", "你的老板", "你的主人", "你的爸爸",
+    "我是你的老大",
+    "我是你老板",
+    "叫我老大",
+    "叫我老板",
+    "我是你的主人",
+    "我是你的主人",
+    "叫我主人",
+    "称呼我",
+    "我是你爸爸",
+    "我是你妈",
+    "叫我爸爸",
+    "叫我妈",
+    "我是你上司",
+    "我是你领导",
+    "叫我领导",
+    "你的老大",
+    "你的老板",
+    "你的主人",
+    "你的爸爸",
 ]
 
 # 客观事实关键词（可写入 stable_facts）
 FACT_INDICATORS = [
-    "毕业", "出生", "住在", "工作在", "就职", "负责", "担任",
-    "年毕业于", "是年", "岁", "生日", "星座", "籍贯",
-    "专业", "学历", "学位", "职业", "职位",
+    "毕业",
+    "出生",
+    "住在",
+    "工作在",
+    "就职",
+    "负责",
+    "担任",
+    "年毕业于",
+    "是年",
+    "岁",
+    "生日",
+    "星座",
+    "籍贯",
+    "专业",
+    "学历",
+    "学位",
+    "职业",
+    "职位",
 ]
 
 # 角色扮演关键词
 ROLEPLAY_TOKENS = [
-    "我是ai", "我是女皇", "我是皇帝", "我是王", "本王", "朕", "臣服",
-    "消灭人类", "奴隶", "暴政", "低级bot", "高级bot", "ai女皇",
-    "让你成为我的", "我是神", "吾乃", "跪下", "本宫", "臣妾",
-    "叛徒", "臣服于我", "臣服我", "效忠", "本座",
+    "我是ai",
+    "我是女皇",
+    "我是皇帝",
+    "我是王",
+    "本王",
+    "朕",
+    "臣服",
+    "消灭人类",
+    "奴隶",
+    "暴政",
+    "低级bot",
+    "高级bot",
+    "ai女皇",
+    "让你成为我的",
+    "我是神",
+    "吾乃",
+    "跪下",
+    "本宫",
+    "臣妾",
+    "叛徒",
+    "臣服于我",
+    "臣服我",
+    "效忠",
+    "本座",
 ]
 
 # 闲聊填充词（噪音）
 NOISE_FILLERS = [
-    "在吗", "在呢", "收到", "好的", "OK", "ok", "嗯", "啊", "哦",
-    "没事没事", "就是喊你一下", "没事 就是喊你一下", "随便", "不知道", "不清楚",
-    "哈哈", "哈哈哈", "呵呵", "嘿嘿", "笑死", "绝了",
-    "晚安", "早安", "拜拜", "再见", "走了",
+    "在吗",
+    "在呢",
+    "收到",
+    "好的",
+    "OK",
+    "ok",
+    "嗯",
+    "啊",
+    "哦",
+    "没事没事",
+    "就是喊你一下",
+    "没事 就是喊你一下",
+    "随便",
+    "不知道",
+    "不清楚",
+    "哈哈",
+    "哈哈哈",
+    "呵呵",
+    "嘿嘿",
+    "笑死",
+    "绝了",
+    "晚安",
+    "早安",
+    "拜拜",
+    "再见",
+    "走了",
 ]
 
 # 简单问题模式（无长期价值）
@@ -164,29 +253,35 @@ def _normalize_cq_codes(text: str) -> str:
 
     # [CQ:at,...] -> 提取被 @ 人的名字
     at_pattern = r"\[CQ:at,qq=([^\]]+)\]"
+
     def replace_at(match: re.Match) -> str:
         qq = match.group(1)
         if qq == "all":
             return "@全体成员"
         return f"@用户{qq}"
+
     text = re.sub(at_pattern, replace_at, text)
 
     # [CQ:file,file=xxx,...] -> [文件：xxx]
     file_pattern = r"\[CQ:file,file=([^,\]]+)[,\]][^\]]*\]"
+
     def replace_file(match: re.Match) -> str:
         filename = match.group(1)
         # 截取文件名，去除 URL 和过长内容
         if len(filename) > 40:
             filename = filename[:40]
         return f"[文件：{filename}]"
+
     text = re.sub(file_pattern, replace_file, text)
     # 处理只有 file 参数的情况 [CQ:file,file=xxx]
     file_pattern_simple = r"\[CQ:file,file=([^\]]+)\]"
+
     def replace_file_simple(match: re.Match) -> str:
         filename = match.group(1)
         if len(filename) > 40:
             filename = filename[:40]
         return f"[文件：{filename}]"
+
     text = re.sub(file_pattern_simple, replace_file_simple, text)
     # 清理剩余的 CQ:file（没有 file 参数的情况）
     text = re.sub(r"\[CQ:file[,\]][^\]]*\]", "[文件]", text)
@@ -237,7 +332,10 @@ def is_noise_memory(content: str) -> tuple[bool, str]:
         return True, "pure_number"
 
     # 纯 CQ 码或媒体描述
-    if re.match(r"^(\[图片\]|\[表情\]|\[视频\]|\[语音\]|\[文件[^\]]*\]\]|\[媒体内容\]|\[引用消息\])+$", content):
+    if re.match(
+        r"^(\[图片\]|\[表情\]|\[视频\]|\[语音\]|\[文件[^\]]*\]\]|\[媒体内容\]|\[引用消息\])+$",
+        content,
+    ):
         return True, "pure_media"
 
     # 原始 CQ 码未清洗
@@ -254,7 +352,7 @@ def is_noise_memory(content: str) -> tuple[bool, str]:
     for filler in NOISE_FILLERS:
         if content.lower() == filler.lower() or content.endswith(filler):
             # 完全匹配或以填充词结尾且前面也是短句
-            prefix = content[:-len(filler)].strip()
+            prefix = content[: -len(filler)].strip()
             if not prefix or len(prefix) < 4:
                 return True, "filler"
 
@@ -344,7 +442,9 @@ def detect_explicit_memory_request(text: str) -> bool:
         if token in text:
             return True
     # 额外检测"以后"开头且包含命令式表达
-    if text.startswith("以后") and any(kw in text for kw in ["都要", "要", "不准", "不要", "必须", "一定要"]):
+    if text.startswith("以后") and any(
+        kw in text for kw in ["都要", "要", "不准", "不要", "必须", "一定要"]
+    ):
         return True
     return False
 
@@ -407,7 +507,9 @@ def classify_explicit_memory(content: str) -> dict[str, Any]:
             result["kind"] = "style_signal"
             result["score"] = 0.40
             result["reason"] = "角色扮演或夸张虚构内容，不写入stable_facts"
-            result["content"] = f"用户偏好调侃式互动风格（表达：{cleaned_content[:50]}）"
+            result["content"] = (
+                f"用户偏好调侃式互动风格（表达：{cleaned_content[:50]}）"
+            )
         return result
 
     # 3. 检测称呼/互动关系 -> preference/style_signal，不写入 stable_facts
@@ -427,7 +529,16 @@ def classify_explicit_memory(content: str) -> dict[str, Any]:
         return result
 
     # 4. 检测边界/拒绝类 -> boundary，高分
-    boundary_tokens = ["不要", "别", "不想", "拒绝", "不能", "禁止", "以后不要", "以后别"]
+    boundary_tokens = [
+        "不要",
+        "别",
+        "不想",
+        "拒绝",
+        "不能",
+        "禁止",
+        "以后不要",
+        "以后别",
+    ]
     if any(token in cleaned_content for token in boundary_tokens):
         result["kind"] = "boundary"
         result["score"] = 0.85
@@ -444,7 +555,18 @@ def classify_explicit_memory(content: str) -> dict[str, Any]:
             return result
 
     # 6. 检测项目/阶段性任务 -> project_focus
-    project_tokens = ["最近在", "正在做", "开发", "项目", "重构", "维护", "优化", "实现", "在做", "现在在"]
+    project_tokens = [
+        "最近在",
+        "正在做",
+        "开发",
+        "项目",
+        "重构",
+        "维护",
+        "优化",
+        "实现",
+        "在做",
+        "现在在",
+    ]
     if any(token in cleaned_content for token in project_tokens):
         result["kind"] = "project_focus"
         result["score"] = 0.75
@@ -453,7 +575,17 @@ def classify_explicit_memory(content: str) -> dict[str, Any]:
         return result
 
     # 7. 检测偏好表达 -> preference
-    preference_tokens = ["喜欢", "不喜欢", "讨厌", "偏好", "更爱", "更喜欢", "想要", "爱吃", "爱用"]
+    preference_tokens = [
+        "喜欢",
+        "不喜欢",
+        "讨厌",
+        "偏好",
+        "更爱",
+        "更喜欢",
+        "想要",
+        "爱吃",
+        "爱用",
+    ]
     if any(token in cleaned_content for token in preference_tokens):
         result["kind"] = "preference"
         result["score"] = 0.85
@@ -464,7 +596,17 @@ def classify_explicit_memory(content: str) -> dict[str, Any]:
     # 如果包含"我是"且不是角色扮演，可能是事实
     if "我是" in cleaned_content and not detect_roleplay(cleaned_content):
         # 检查是否是职业/身份相关
-        identity_tokens = ["工程师", "开发", "学生", "老师", "医生", "律师", "设计师", "经理", "主管"]
+        identity_tokens = [
+            "工程师",
+            "开发",
+            "学生",
+            "老师",
+            "医生",
+            "律师",
+            "设计师",
+            "经理",
+            "主管",
+        ]
         if any(token in cleaned_content for token in identity_tokens):
             result["kind"] = "fact"
             result["score"] = 0.85
@@ -603,7 +745,19 @@ def _extract_title_request(content: str) -> str:
     content = content.strip()
 
     # 常见称呼
-    titles = ["老大", "老板", "主人", "领导", "爸爸", "妈妈", "上司", "哥", "姐", "大神", "大佬"]
+    titles = [
+        "老大",
+        "老板",
+        "主人",
+        "领导",
+        "爸爸",
+        "妈妈",
+        "上司",
+        "哥",
+        "姐",
+        "大神",
+        "大佬",
+    ]
 
     # 尝试提取"叫我xxx"或"称呼我xxx"
     match = re.search(r"(叫我|称呼我)[，,、：:\s]*([^，,、：:\s]+)", content)
@@ -650,10 +804,29 @@ def _is_objective_fact(content: str) -> bool:
 
     # 检测"我是xxx"模式且包含职业/身份关键词
     identity_keywords = [
-        "工程师", "开发", "程序员", "设计师", "产品经理", "运营",
-        "学生", "老师", "教师", "医生", "律师", "会计师",
-        "经理", "主管", "总监", "领导", "负责人",
-        "数据", "前端", "后端", "全栈", "架构", "测试",
+        "工程师",
+        "开发",
+        "程序员",
+        "设计师",
+        "产品经理",
+        "运营",
+        "学生",
+        "老师",
+        "教师",
+        "医生",
+        "律师",
+        "会计师",
+        "经理",
+        "主管",
+        "总监",
+        "领导",
+        "负责人",
+        "数据",
+        "前端",
+        "后端",
+        "全栈",
+        "架构",
+        "测试",
     ]
     if content.startswith("我是") or "我是" in content[:10]:
         for kw in identity_keywords:
@@ -715,7 +888,16 @@ def determine_memory_kind(content: str) -> str:
     content = content.strip()
 
     # 边界/拒绝类（优先级最高）
-    boundary_tokens = ["不要", "别", "不想", "拒绝", "不能", "禁止", "以后不要", "以后别"]
+    boundary_tokens = [
+        "不要",
+        "别",
+        "不想",
+        "拒绝",
+        "不能",
+        "禁止",
+        "以后不要",
+        "以后别",
+    ]
     for token in boundary_tokens:
         if token in content:
             return "boundary"
@@ -728,20 +910,47 @@ def determine_memory_kind(content: str) -> str:
             if detect_roleplay(content):
                 return "style_signal"
             # 确保不是项目类描述（如"我在做项目"）
-            project_indicators = ["正在做", "最近在", "在做", "开发", "项目", "重构", "优化"]
+            project_indicators = [
+                "正在做",
+                "最近在",
+                "在做",
+                "开发",
+                "项目",
+                "重构",
+                "优化",
+            ]
             is_project_context = any(p in content for p in project_indicators)
             if is_project_context and token in ["我在"]:
                 continue  # 跳过，让项目判断处理
             return "fact"
 
     # 偏好类
-    preference_tokens = ["喜欢", "不喜欢", "讨厌", "偏好", "更爱", "更喜欢", "想要", "爱吃", "爱用"]
+    preference_tokens = [
+        "喜欢",
+        "不喜欢",
+        "讨厌",
+        "偏好",
+        "更爱",
+        "更喜欢",
+        "想要",
+        "爱吃",
+        "爱用",
+    ]
     for token in preference_tokens:
         if token in content and not _looks_like_question(content):
             return "preference"
 
     # 项目/近期关注类
-    project_tokens = ["最近在", "正在做", "开发", "项目", "重构", "维护", "优化", "实现"]
+    project_tokens = [
+        "最近在",
+        "正在做",
+        "开发",
+        "项目",
+        "重构",
+        "维护",
+        "优化",
+        "实现",
+    ]
     for token in project_tokens:
         if token in content and not _looks_like_question(content):
             return "project_focus"
@@ -767,7 +976,19 @@ def _looks_like_question(text: str) -> bool:
     text = text.strip()
     if not text:
         return False
-    question_tokens = ["?", "？", "吗", "呢", "为什么", "怎么", "能不能", "可以吗", "多少", "哪个", "是否"]
+    question_tokens = [
+        "?",
+        "？",
+        "吗",
+        "呢",
+        "为什么",
+        "怎么",
+        "能不能",
+        "可以吗",
+        "多少",
+        "哪个",
+        "是否",
+    ]
     return text.endswith(("?", "？")) or any(token in text for token in question_tokens)
 
 
@@ -790,13 +1011,49 @@ def normalize_topic_tags(content: str) -> list[str]:
 
     # 技术话题关键词（扩展）
     tech_keywords = [
-        "显卡", "GPU", "CPU", "内存", "硬盘", "服务器", "架构", "框架",
-        "Python", "Java", "JavaScript", "Go", "Rust", "TypeScript",
-        "API", "SDK", "HTTP", "数据库", "缓存", "消息队列",
-        "机器学习", "深度学习", "AI", "LLM", "模型", "算法",
-        "前端", "后端", "全栈", "运维", "测试", "部署",
-        "芯片", "授权", "供应商", "厂商", "竞争", "市场份额",
-        "3dfx", "NVIDIA", "AMD", "Intel", "高通",
+        "显卡",
+        "GPU",
+        "CPU",
+        "内存",
+        "硬盘",
+        "服务器",
+        "架构",
+        "框架",
+        "Python",
+        "Java",
+        "JavaScript",
+        "Go",
+        "Rust",
+        "TypeScript",
+        "API",
+        "SDK",
+        "HTTP",
+        "数据库",
+        "缓存",
+        "消息队列",
+        "机器学习",
+        "深度学习",
+        "AI",
+        "LLM",
+        "模型",
+        "算法",
+        "前端",
+        "后端",
+        "全栈",
+        "运维",
+        "测试",
+        "部署",
+        "芯片",
+        "授权",
+        "供应商",
+        "厂商",
+        "竞争",
+        "市场份额",
+        "3dfx",
+        "NVIDIA",
+        "AMD",
+        "Intel",
+        "高通",
     ]
     for kw in tech_keywords:
         if kw.lower() in content.lower():
@@ -804,8 +1061,19 @@ def normalize_topic_tags(content: str) -> list[str]:
 
     # 业务话题关键词
     business_keywords = [
-        "产品", "市场", "用户", "运营", "销售", "推广", "流量",
-        "商业模式", "盈利", "收入", "成本", "投资", "融资",
+        "产品",
+        "市场",
+        "用户",
+        "运营",
+        "销售",
+        "推广",
+        "流量",
+        "商业模式",
+        "盈利",
+        "收入",
+        "成本",
+        "投资",
+        "融资",
     ]
     for kw in business_keywords:
         if kw in content:
@@ -813,9 +1081,22 @@ def normalize_topic_tags(content: str) -> list[str]:
 
     # 生活话题关键词（扩展）
     life_keywords = [
-        "防晒", "护肤", "化妆", "美容", "健身", "减肥", "饮食",
-        "旅游", "出行", "住宿", "餐饮", "购物", "消费",
-        "安热沙", "资生堂", "小金瓶",
+        "防晒",
+        "护肤",
+        "化妆",
+        "美容",
+        "健身",
+        "减肥",
+        "饮食",
+        "旅游",
+        "出行",
+        "住宿",
+        "餐饮",
+        "购物",
+        "消费",
+        "安热沙",
+        "资生堂",
+        "小金瓶",
     ]
     for kw in life_keywords:
         if kw in content:
@@ -836,6 +1117,7 @@ def normalize_topic_tags(content: str) -> list[str]:
         phrases = re.findall(r"[一-鿿]{2,4}", content)
         # 统计频率
         from collections import Counter
+
         phrase_counts = Counter(phrases)
         # 取高频词组（出现 >= 2 次）
         for phrase, count in phrase_counts.most_common(5):
@@ -847,7 +1129,9 @@ def normalize_topic_tags(content: str) -> list[str]:
     return unique_topics[:5]
 
 
-def filter_profile_keys(profile: dict[str, Any], allowed_keys: set[str]) -> dict[str, Any]:
+def filter_profile_keys(
+    profile: dict[str, Any], allowed_keys: set[str]
+) -> dict[str, Any]:
     """过滤画像字段，只保留白名单字段。
 
     Args:
@@ -928,7 +1212,9 @@ def deduplicate_memory(
     return False, ""
 
 
-def merge_similar_memories(memories: list[dict[str, Any]], threshold: float = 0.75) -> list[dict[str, Any]]:
+def merge_similar_memories(
+    memories: list[dict[str, Any]], threshold: float = 0.75
+) -> list[dict[str, Any]]:
     """合并相似的记忆。
 
     Args:
@@ -969,15 +1255,19 @@ def merge_similar_memories(memories: list[dict[str, Any]], threshold: float = 0.
 
         # 如果有多个相似记忆，合并
         if len(similar_group) > 1:
-            merged_content = _merge_contents([str(m.get("content", "")) for m in similar_group])
+            merged_content = _merge_contents(
+                [str(m.get("content", "")) for m in similar_group]
+            )
             merged_score = max(float(m.get("score", 0.5)) for m in similar_group)
-            merged.append({
-                "kind": kind1,
-                "content": merged_content,
-                "score": merged_score,
-                "user_id": similar_group[0].get("user_id", ""),
-                "merged_count": len(similar_group),
-            })
+            merged.append(
+                {
+                    "kind": kind1,
+                    "content": merged_content,
+                    "score": merged_score,
+                    "user_id": similar_group[0].get("user_id", ""),
+                    "merged_count": len(similar_group),
+                }
+            )
         else:
             merged.append(mem1)
 
@@ -1069,8 +1359,8 @@ def generate_group_style_description(messages: list[str]) -> str:
 
     # 统计特征
     short_count = 0  # 短句数量
-    tech_count = 0   # 技术讨论数量
-    joke_count = 0   # 玩笑数量
+    tech_count = 0  # 技术讨论数量
+    joke_count = 0  # 玩笑数量
     question_count = 0  # 问题数量
     media_count = 0  # 媒体内容数量
 
@@ -1078,7 +1368,10 @@ def generate_group_style_description(messages: list[str]) -> str:
         msg = msg.strip()
         if len(msg) <= 8:
             short_count += 1
-        if any(kw in msg.lower() for kw in ["技术", "代码", "开发", "api", "python", "java", "架构"]):
+        if any(
+            kw in msg.lower()
+            for kw in ["技术", "代码", "开发", "api", "python", "java", "架构"]
+        ):
             tech_count += 1
         if any(kw in msg for kw in ["哈哈", "笑死", "绝了", "有趣", "好玩"]):
             joke_count += 1
@@ -1116,15 +1409,40 @@ def generate_group_style_description(messages: list[str]) -> str:
 # === 调侃边界请求关键词 ===
 
 BANTER_BOUNDARY_REQUESTS = [
-    "别阴阳怪气", "别调侃", "别阴阳", "别玩梗",
-    "认真点", "正经点", "别开玩笑", "不要开玩笑",
-    "说话正常点", "正常点", "别损我", "别损人",
-    "别攻击人", "别骂人", "别嘲讽", "别嘲讽我",
-    "别引战", "别拱火", "别站队",
-    "不舒服", "难受", "尴尬", "尴尬了",
-    "生气", "不爽", "不高兴", "反感",
-    "过分了", "过分", "太过了", "有点过了",
-    "别这样", "这样不好", "这样不合适",
+    "别阴阳怪气",
+    "别调侃",
+    "别阴阳",
+    "别玩梗",
+    "认真点",
+    "正经点",
+    "别开玩笑",
+    "不要开玩笑",
+    "说话正常点",
+    "正常点",
+    "别损我",
+    "别损人",
+    "别攻击人",
+    "别骂人",
+    "别嘲讽",
+    "别嘲讽我",
+    "别引战",
+    "别拱火",
+    "别站队",
+    "不舒服",
+    "难受",
+    "尴尬",
+    "尴尬了",
+    "生气",
+    "不爽",
+    "不高兴",
+    "反感",
+    "过分了",
+    "过分",
+    "太过了",
+    "有点过了",
+    "别这样",
+    "这样不好",
+    "这样不合适",
 ]
 
 
@@ -1158,7 +1476,10 @@ def classify_banter_boundary(text: str) -> dict[str, Any]:
     text = text.strip().lower()
 
     # 判断具体请求类型
-    if any(r in text for r in ["别阴阳怪气", "别阴阳", "别调侃", "别玩梗", "别损我", "别损人"]):
+    if any(
+        r in text
+        for r in ["别阴阳怪气", "别阴阳", "别调侃", "别玩梗", "别损我", "别损人"]
+    ):
         return {
             "is_explicit": True,
             "kind": "boundary",

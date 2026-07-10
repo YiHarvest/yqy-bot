@@ -102,7 +102,9 @@ class LLMRouter:
             response = await client.chat.completions.create(
                 model=settings.model,
                 messages=messages,
-                temperature=settings.temperature if temperature is None else temperature,
+                temperature=(
+                    settings.temperature if temperature is None else temperature
+                ),
                 max_tokens=settings.max_tokens if max_tokens is None else max_tokens,
             )
         except OpenAIError as exc:  # pragma: no cover - network/runtime dependent
@@ -138,7 +140,9 @@ class LLMRouter:
             response = await client.chat.completions.create(
                 model=settings.model,
                 messages=messages,
-                temperature=settings.temperature if temperature is None else temperature,
+                temperature=(
+                    settings.temperature if temperature is None else temperature
+                ),
                 max_tokens=settings.max_tokens if max_tokens is None else max_tokens,
                 response_format={"type": "json_object"},
             )
@@ -148,7 +152,9 @@ class LLMRouter:
         try:
             payload = json.loads(content)
         except json.JSONDecodeError as exc:
-            raise RuntimeError(f"{role} model returned invalid JSON: {content}") from exc
+            raise RuntimeError(
+                f"{role} model returned invalid JSON: {content}"
+            ) from exc
         if not isinstance(payload, dict):
             raise RuntimeError(f"{role} model returned non-object JSON")
         return payload

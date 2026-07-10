@@ -3,14 +3,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
-import time
 from dataclasses import dataclass
 from typing import Any
 
 from yqy_bot.core.config import ProjectConfig
 from yqy_bot.core.llm_router import LLMRouter
-from yqy_bot.core.models import ConversationContext, GeneratedResponse, GateDecision, IntentDecision, ParsedMessage
+from yqy_bot.core.models import (
+    ConversationContext,
+    GeneratedResponse,
+    GateDecision,
+    IntentDecision,
+    ParsedMessage,
+)
 from yqy_bot.storage.repositories import Repositories
 from yqy_bot.background.memory_utils import (
     normalize_message_text,
@@ -22,14 +26,10 @@ from yqy_bot.background.memory_utils import (
     normalize_topic_tags,
     filter_profile_keys,
     deduplicate_memory,
-    merge_similar_memories,
-    normalize_summary_input,
-    generate_group_style_description,
     detect_banter_boundary_request,
     classify_banter_boundary,
     USER_PROFILE_KEYS,
     GROUP_PROFILE_KEYS,
-    MEMORY_KIND_BASE_SCORE,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -47,7 +47,9 @@ class BackgroundJob:
 class BackgroundWorker:
     """后台任务处理器，负责批量更新记忆、画像、摘要等数据。"""
 
-    def __init__(self, config: ProjectConfig, repos: Repositories, llm_router: LLMRouter) -> None:
+    def __init__(
+        self, config: ProjectConfig, repos: Repositories, llm_router: LLMRouter
+    ) -> None:
         """初始化后台任务处理器。
 
         Args:
@@ -95,7 +97,15 @@ class BackgroundWorker:
             response: 生成的回复对象，可选（未回复时为 None）
             context: 对话上下文对象，可选（未回复时为 None）
         """
-        await self._queue.put(BackgroundJob(parsed=parsed, gate=gate, intent=intent, response=response, context=context))
+        await self._queue.put(
+            BackgroundJob(
+                parsed=parsed,
+                gate=gate,
+                intent=intent,
+                response=response,
+                context=context,
+            )
+        )
 
     async def _run(self) -> None:
         """运行后台任务循环，定期批量处理队列中的任务。
@@ -168,7 +178,9 @@ class BackgroundWorker:
                 self._apply_background_payload(job, payload)
                 return
             except Exception as e:
-                LOGGER.info("[后台任务] chat_key=%s LLM调用失败 error=%s", parsed.chat_key, e)
+                LOGGER.info(
+                    "[后台任务] chat_key=%s LLM调用失败 error=%s", parsed.chat_key, e
+                )
         self._update_from_heuristics(job)
 
     async def _call_background_llm(self, job: BackgroundJob) -> dict[str, Any]:
@@ -211,8 +223,16 @@ class BackgroundWorker:
             "reply_text": reply_text,
             "history": history_cleaned[-10:],  # 最多 10 条
             "existing_summary": context.summary[:500] if context.summary else "",
-            "existing_user_profile": _extract_existing_profile_fields(context.user_profile, USER_PROFILE_KEYS),
-            "existing_group_profile": _extract_existing_profile_fields(context.group_profile, GROUP_PROFILE_KEYS) if parsed.is_group else {},
+            "existing_user_profile": _extract_existing_profile_fields(
+                context.user_profile, USER_PROFILE_KEYS
+            ),
+            "existing_group_profile": (
+                _extract_existing_profile_fields(
+                    context.group_profile, GROUP_PROFILE_KEYS
+                )
+                if parsed.is_group
+                else {}
+            ),
             "existing_memories": [
                 {"kind": m.get("kind", "fact"), "content": m.get("content", "")[:100]}
                 for m in (context.relevant_memories or [])[:5]
@@ -223,14 +243,19 @@ class BackgroundWorker:
             "background",
             [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+                {
+                    "role": "user",
+                    "content": json.dumps(user_payload, ensure_ascii=False),
+                },
             ],
             temperature=0.15,
             max_tokens=1024,
         )
         return payload
 
-    def _apply_background_payload(self, job: BackgroundJob, payload: dict[str, object]) -> None:
+    def _apply_background_payload(
+        self, job: BackgroundJob, payload: dict[str, object]
+    ) -> None:
         """应用 LLM 返回的后台更新载荷到数据库。
 
         Args:
@@ -240,11 +265,15 @@ class BackgroundWorker:
         """
         parsed = job.parsed
         user_state = self.repos.get_user_profile(parsed.user_id)
-        group_state = self.repos.get_group_profile(parsed.group_id) if parsed.is_group else {
-            "profile": {},
-            "prompt_md": "",
-            "message_count_since_update": 0,
-        }
+        group_state = (
+            self.repos.get_group_profile(parsed.group_id)
+            if parsed.is_group
+            else {
+                "profile": {},
+                "prompt_md": "",
+                "message_count_since_update": 0,
+            }
+        )
 
         # 处理摘要
         summary_data = payload.get("summary")
@@ -252,12 +281,20 @@ class BackgroundWorker:
             brief = str(summary_data.get("brief", "")).strip()
             if brief and len(brief) <= 150:
                 self.repos.upsert_summary(parsed.chat_key, brief)
-                LOGGER.info("[后台任务] chat_key=%s 更新摘要 brief=%s", parsed.chat_key, brief[:60])
+                LOGGER.info(
+                    "[后台任务] chat_key=%s 更新摘要 brief=%s",
+                    parsed.chat_key,
+                    brief[:60],
+                )
         elif isinstance(summary_data, str):
             brief = str(summary_data).strip()
             if brief and len(brief) <= 150:
                 self.repos.upsert_summary(parsed.chat_key, brief)
-                LOGGER.info("[后台任务] chat_key=%s 更新摘要 brief=%s", parsed.chat_key, brief[:60])
+                LOGGER.info(
+                    "[后台任务] chat_key=%s 更新摘要 brief=%s",
+                    parsed.chat_key,
+                    brief[:60],
+                )
 
         # 处理用户画像
         if self._should_update_user_profile(parsed, user_state):
@@ -270,7 +307,9 @@ class BackgroundWorker:
                     parsed.text,
                 )
                 user_prompt_md = _render_profile_md(user_profile, "用户画像")
-                self.repos.upsert_user_profile(parsed.user_id, user_profile, user_prompt_md, dirty_count=0)
+                self.repos.upsert_user_profile(
+                    parsed.user_id, user_profile, user_prompt_md, dirty_count=0
+                )
                 LOGGER.info(
                     "[后台任务] user_id=%s 更新用户画像 stable_facts=%s preferences=%s recent_focus=%s boundaries=%s",
                     parsed.user_id,
@@ -281,7 +320,9 @@ class BackgroundWorker:
                 )
 
         # 处理群画像
-        if parsed.is_group and self._should_update_group_profile(parsed, group_state, job.context):
+        if parsed.is_group and self._should_update_group_profile(
+            parsed, group_state, job.context
+        ):
             group_profile_input = payload.get("group_profile")
             if isinstance(group_profile_input, dict):
                 # 白名单过滤
@@ -316,7 +357,9 @@ class BackgroundWorker:
             # 噪音过滤
             is_noise, reason = is_noise_memory(content)
             if is_noise:
-                LOGGER.debug("[后台任务] 拒绝记忆 reason=%s content=%s", reason, content[:40])
+                LOGGER.debug(
+                    "[后台任务] 拒绝记忆 reason=%s content=%s", reason, content[:40]
+                )
                 continue
 
             # 角色扮演检测
@@ -327,10 +370,17 @@ class BackgroundWorker:
             score = float(item.get("score", calculate_memory_score(kind, content)))
 
             # 去重检查
-            existing_memories = self.repos.get_recent_memories(user_id=parsed.user_id, limit=10)
-            should_skip, merge_content = deduplicate_memory(content, existing_memories, user_id=parsed.user_id, kind=kind)
+            existing_memories = self.repos.get_recent_memories(
+                user_id=parsed.user_id, limit=10
+            )
+            should_skip, merge_content = deduplicate_memory(
+                content, existing_memories, user_id=parsed.user_id, kind=kind
+            )
             if should_skip:
-                if merge_content and merge_content not in ("exact_duplicate", "high_similarity"):
+                if merge_content and merge_content not in (
+                    "exact_duplicate",
+                    "high_similarity",
+                ):
                     # 更新已有记忆
                     LOGGER.debug("[后台任务] 合并记忆 content=%s", merge_content[:40])
                 continue
@@ -343,7 +393,11 @@ class BackgroundWorker:
             )
             memory_count += 1
         if memory_count:
-            LOGGER.info("[后台任务] chat_key=%s 添加记忆 count=%s", parsed.chat_key, memory_count)
+            LOGGER.info(
+                "[后台任务] chat_key=%s 添加记忆 count=%s",
+                parsed.chat_key,
+                memory_count,
+            )
 
         # 处理反思
         reflection_count = 0
@@ -353,14 +407,24 @@ class BackgroundWorker:
             content = str(item.get("content", "")).strip()
             reflection_type = str(item.get("type", "response_quality"))
             if content and len(content) >= 10:
-                reflection_json = json.dumps({"type": reflection_type, "content": content}, ensure_ascii=False)
+                reflection_json = json.dumps(
+                    {"type": reflection_type, "content": content}, ensure_ascii=False
+                )
                 self.repos.add_reflection(parsed=parsed, content=reflection_json)
                 reflection_count += 1
         if reflection_count:
-            LOGGER.info("[后台任务] chat_key=%s 添加反思 count=%s", parsed.chat_key, reflection_count)
+            LOGGER.info(
+                "[后台任务] chat_key=%s 添加反思 count=%s",
+                parsed.chat_key,
+                reflection_count,
+            )
         reflection_count += self._drain_context_reflection_events(job)
         if reflection_count:
-            LOGGER.info("[后台任务] chat_key=%s 添加上下文反思 count=%s", parsed.chat_key, reflection_count)
+            LOGGER.info(
+                "[后台任务] chat_key=%s 添加上下文反思 count=%s",
+                parsed.chat_key,
+                reflection_count,
+            )
 
     def _should_run_background_llm(self, job: BackgroundJob) -> bool:
         """判断是否应运行后台 LLM 处理。
@@ -383,10 +447,16 @@ class BackgroundWorker:
         group_state = self.repos.get_group_profile(parsed.group_id)
         message_count = int(group_state.get("message_count_since_update", 0))
         cooldown_state = self.repos.get_cooldown_state(parsed.chat_key) or {}
-        heat_state = str(job.context.group_heat_state if job.context is not None else cooldown_state.get("heat_state", "quiet"))
+        heat_state = str(
+            job.context.group_heat_state
+            if job.context is not None
+            else cooldown_state.get("heat_state", "quiet")
+        )
         return message_count >= 50 and heat_state not in {"hot", "flood"}
 
-    def _should_update_user_profile(self, parsed: ParsedMessage, user_state: dict[str, object]) -> bool:
+    def _should_update_user_profile(
+        self, parsed: ParsedMessage, user_state: dict[str, object]
+    ) -> bool:
         """判断是否应更新用户画像。
 
         Args:
@@ -420,7 +490,11 @@ class BackgroundWorker:
         if not parsed.is_group:
             return False
         cooldown_state = self.repos.get_cooldown_state(parsed.chat_key) or {}
-        heat_state = str(context.group_heat_state if context is not None else cooldown_state.get("heat_state", "quiet"))
+        heat_state = str(
+            context.group_heat_state
+            if context is not None
+            else cooldown_state.get("heat_state", "quiet")
+        )
         if heat_state in {"hot", "flood"}:
             return False
         return int(group_state.get("message_count_since_update", 0)) >= 50
@@ -435,7 +509,11 @@ class BackgroundWorker:
         text = normalize_message_text(parsed.text)
         if not text:
             return
-        LOGGER.info("[后台任务] chat_key=%s user_id=%s 方式=heuristic", parsed.chat_key, parsed.user_id)
+        LOGGER.info(
+            "[后台任务] chat_key=%s user_id=%s 方式=heuristic",
+            parsed.chat_key,
+            parsed.user_id,
+        )
 
         # 调侃边界请求处理（优先）
         if detect_banter_boundary_request(text):
@@ -467,13 +545,23 @@ class BackgroundWorker:
                         boundaries.append(content)
                     user_profile["boundaries"] = boundaries[-10:]
                     user_prompt_md = _render_profile_md(user_profile, "用户画像")
-                    self.repos.upsert_user_profile(parsed.user_id, user_profile, user_prompt_md, dirty_count=0)
-                    LOGGER.info("[后台任务] user_id=%s 更新用户画像边界 boundaries=%s", parsed.user_id, len(boundaries))
+                    self.repos.upsert_user_profile(
+                        parsed.user_id, user_profile, user_prompt_md, dirty_count=0
+                    )
+                    LOGGER.info(
+                        "[后台任务] user_id=%s 更新用户画像边界 boundaries=%s",
+                        parsed.user_id,
+                        len(boundaries),
+                    )
 
         # 噪音过滤
         is_noise, noise_reason = is_noise_memory(text)
         if is_noise:
-            LOGGER.debug("[后台任务] heuristic 跳过噪音 reason=%s text=%s", noise_reason, text[:40])
+            LOGGER.debug(
+                "[后台任务] heuristic 跳过噪音 reason=%s text=%s",
+                noise_reason,
+                text[:40],
+            )
             return
 
         # 更新摘要（使用规范化后的文本）
@@ -481,17 +569,28 @@ class BackgroundWorker:
         if _should_update_summary_heuristic(text):
             combined = "；".join(part for part in [summary, text[:100]] if part)
             self.repos.upsert_summary(parsed.chat_key, combined[-500:])
-            LOGGER.info("[后台任务] chat_key=%s 更新摘要(heuristic) summary=%s", parsed.chat_key, combined[-60:])
+            LOGGER.info(
+                "[后台任务] chat_key=%s 更新摘要(heuristic) summary=%s",
+                parsed.chat_key,
+                combined[-60:],
+            )
 
         # 更新用户画像
         if _should_touch_profile_heuristic(text):
             user_state = self.repos.get_user_profile(parsed.user_id)
             user_profile = _normalize_user_profile(user_state["profile"])
-            updated_user_profile, changed = _apply_user_profile_signal_heuristic(user_profile, text, parsed.message_id)
+            updated_user_profile, changed = _apply_user_profile_signal_heuristic(
+                user_profile, text, parsed.message_id
+            )
             if changed:
                 dirty_count = int(user_state.get("dirty_count", 0)) + 1
                 user_prompt_md = _render_profile_md(updated_user_profile, "用户画像")
-                self.repos.upsert_user_profile(parsed.user_id, updated_user_profile, user_prompt_md, dirty_count=dirty_count)
+                self.repos.upsert_user_profile(
+                    parsed.user_id,
+                    updated_user_profile,
+                    user_prompt_md,
+                    dirty_count=dirty_count,
+                )
                 LOGGER.info(
                     "[后台任务] user_id=%s 更新用户画像(heuristic) dirty_count=%s stable_facts=%s preferences=%s",
                     parsed.user_id,
@@ -508,15 +607,19 @@ class BackgroundWorker:
                 group_profile = _normalize_group_profile(group_state["profile"])
                 cooldown_state = self.repos.get_cooldown_state(parsed.chat_key)
                 if int(group_state.get("message_count_since_update", 0)) >= 50:
-                    updated_group_profile, changed = _apply_group_profile_signal_heuristic(
-                        group_profile,
-                        text,
-                        parsed.user_id,
-                        parsed.message_id,
-                        cooldown_state,
+                    updated_group_profile, changed = (
+                        _apply_group_profile_signal_heuristic(
+                            group_profile,
+                            text,
+                            parsed.user_id,
+                            parsed.message_id,
+                            cooldown_state,
+                        )
                     )
                     if changed:
-                        group_prompt_md = _render_profile_md(updated_group_profile, "群画像")
+                        group_prompt_md = _render_profile_md(
+                            updated_group_profile, "群画像"
+                        )
                         self.repos.upsert_group_profile(
                             parsed.group_id,
                             updated_group_profile,
@@ -536,29 +639,52 @@ class BackgroundWorker:
 
         # 低分内容不进入长期记忆
         if score < 0.45:
-            LOGGER.debug("[后台任务] heuristic 跳过低分记忆 kind=%s score=%.2f text=%s", kind, score, text[:40])
+            LOGGER.debug(
+                "[后台任务] heuristic 跳过低分记忆 kind=%s score=%.2f text=%s",
+                kind,
+                score,
+                text[:40],
+            )
             return
 
         # 去重检查
-        existing_memories = self.repos.get_recent_memories(user_id=parsed.user_id, limit=10)
-        should_skip, _ = deduplicate_memory(text, existing_memories, user_id=parsed.user_id, kind=kind)
+        existing_memories = self.repos.get_recent_memories(
+            user_id=parsed.user_id, limit=10
+        )
+        should_skip, _ = deduplicate_memory(
+            text, existing_memories, user_id=parsed.user_id, kind=kind
+        )
         if should_skip:
             LOGGER.debug("[后台任务] heuristic 跳过重复记忆 text=%s", text[:40])
             return
 
         self.repos.add_memory(parsed=parsed, kind=kind, content=text[:180], score=score)
-        LOGGER.info("[后台任务] chat_key=%s 添加记忆(heuristic) kind=%s score=%.2f content=%s", parsed.chat_key, kind, score, text[:60])
+        LOGGER.info(
+            "[后台任务] chat_key=%s 添加记忆(heuristic) kind=%s score=%.2f content=%s",
+            parsed.chat_key,
+            kind,
+            score,
+            text[:60],
+        )
 
         # 添加反思
         if job.response is not None and job.response.text.strip():
             reflection_data = _build_heuristic_reflection(job)
             reflection_json = json.dumps(reflection_data, ensure_ascii=False)
             self.repos.add_reflection(parsed=parsed, content=reflection_json)
-            LOGGER.info("[后台任务] chat_key=%s 添加反思(heuristic) type=%s", parsed.chat_key, reflection_data.get("type", "response_quality"))
+            LOGGER.info(
+                "[后台任务] chat_key=%s 添加反思(heuristic) type=%s",
+                parsed.chat_key,
+                reflection_data.get("type", "response_quality"),
+            )
 
         extra_reflection_count = self._drain_context_reflection_events(job)
         if extra_reflection_count:
-            LOGGER.info("[后台任务] chat_key=%s 添加上下文反思(heuristic) count=%s", parsed.chat_key, extra_reflection_count)
+            LOGGER.info(
+                "[后台任务] chat_key=%s 添加上下文反思(heuristic) count=%s",
+                parsed.chat_key,
+                extra_reflection_count,
+            )
 
     def _drain_context_reflection_events(self, job: BackgroundJob) -> int:
         """把上下文里收集到的反思事件写入数据库。"""
@@ -566,7 +692,11 @@ class BackgroundWorker:
         if context is None:
             return 0
         events = []
-        raw_events = context.context_data.pop("reflection_events", []) if isinstance(context.context_data, dict) else []
+        raw_events = (
+            context.context_data.pop("reflection_events", [])
+            if isinstance(context.context_data, dict)
+            else []
+        )
         if not isinstance(raw_events, list):
             return 0
         for item in raw_events:
@@ -695,7 +825,9 @@ def _build_background_system_prompt() -> str:
 如果没有值得记忆的内容，返回空数组，不要硬编内容。"""
 
 
-def _extract_existing_profile_fields(profile: dict[str, Any], allowed_keys: set[str]) -> dict[str, Any]:
+def _extract_existing_profile_fields(
+    profile: dict[str, Any], allowed_keys: set[str]
+) -> dict[str, Any]:
     """提取已有画像中的白名单字段。
 
     Args:
@@ -779,7 +911,9 @@ def _build_user_profile(
 
     # 更新其他字段
     if new_data.get("communication_style"):
-        merged["communication_style"] = str(new_data.get("communication_style", ""))[:100]
+        merged["communication_style"] = str(new_data.get("communication_style", ""))[
+            :100
+        ]
     if isinstance(new_data.get("confidence"), dict):
         merged["confidence"] = dict(new_data.get("confidence", {}))
 
@@ -926,7 +1060,11 @@ def _normalize_user_profile(profile: dict[str, object]) -> dict[str, object]:
         "communication_style": str(profile.get("communication_style", "")),
         "recent_focus": _profile_list(profile, "recent_focus"),
         "boundaries": _profile_list(profile, "boundaries"),
-        "confidence": dict(profile.get("confidence", {})) if isinstance(profile.get("confidence", {}), dict) else {},
+        "confidence": (
+            dict(profile.get("confidence", {}))
+            if isinstance(profile.get("confidence", {}), dict)
+            else {}
+        ),
     }
     # 保留白名单内的额外字段
     for key, value in profile.items():
@@ -997,7 +1135,21 @@ def _should_update_summary_heuristic(text: str) -> bool:
     if not text:
         return False
     # 冲突消息不更新摘要
-    if any(token in text for token in ["不喜欢", "不再", "改成", "改为", "别记", "别把", "不是", "取消", "改口", "相反"]):
+    if any(
+        token in text
+        for token in [
+            "不喜欢",
+            "不再",
+            "改成",
+            "改为",
+            "别记",
+            "别把",
+            "不是",
+            "取消",
+            "改口",
+            "相反",
+        ]
+    ):
         return False
     # 过短内容不更新
     if len(text) < 10:
@@ -1021,7 +1173,18 @@ def _should_touch_profile_heuristic(text: str) -> bool:
     if _looks_like_question_heuristic(text):
         return False
     # 低信息词不更新
-    low_info = ["哈哈", "哈哈哈", "在吗", "晚安", "早安", "收到", "OK", "ok", "好的", "表情"]
+    low_info = [
+        "哈哈",
+        "哈哈哈",
+        "在吗",
+        "晚安",
+        "早安",
+        "收到",
+        "OK",
+        "ok",
+        "好的",
+        "表情",
+    ]
     if any(keyword in text for keyword in low_info):
         return False
     return bool(_profile_signal_kind_heuristic(text))
@@ -1051,8 +1214,22 @@ def _looks_like_question_heuristic(text: str) -> bool:
     lowered = text.strip()
     if not lowered:
         return False
-    question_tokens = ["?", "？", "吗", "呢", "为什么", "怎么", "能不能", "可以吗", "多少", "哪个", "是否"]
-    return lowered.endswith(("?", "？")) or any(token in lowered for token in question_tokens)
+    question_tokens = [
+        "?",
+        "？",
+        "吗",
+        "呢",
+        "为什么",
+        "怎么",
+        "能不能",
+        "可以吗",
+        "多少",
+        "哪个",
+        "是否",
+    ]
+    return lowered.endswith(("?", "？")) or any(
+        token in lowered for token in question_tokens
+    )
 
 
 def _profile_signal_kind_heuristic(text: str) -> str:
@@ -1067,34 +1244,72 @@ def _profile_signal_kind_heuristic(text: str) -> str:
     """
     if is_explicit_remember(text):
         return "remember"
-    if _looks_like_preference_heuristic(text) and not _looks_like_question_heuristic(text):
+    if _looks_like_preference_heuristic(text) and not _looks_like_question_heuristic(
+        text
+    ):
         return "preference"
     if _looks_like_project_heuristic(text) and not _looks_like_question_heuristic(text):
         return "project"
-    if _looks_like_stable_fact_heuristic(text) and not _looks_like_question_heuristic(text):
+    if _looks_like_stable_fact_heuristic(text) and not _looks_like_question_heuristic(
+        text
+    ):
         if detect_roleplay(text):
             return ""
         return "fact"
-    if _looks_like_boundary_heuristic(text) and not _looks_like_question_heuristic(text):
+    if _looks_like_boundary_heuristic(text) and not _looks_like_question_heuristic(
+        text
+    ):
         return "boundary"
     return ""
 
 
 def _looks_like_preference_heuristic(text: str) -> bool:
     """判断文本是否表达偏好（启发式）。"""
-    preference_tokens = ["喜欢", "不喜欢", "讨厌", "偏好", "更爱", "更喜欢", "想要", "爱吃", "爱用"]
+    preference_tokens = [
+        "喜欢",
+        "不喜欢",
+        "讨厌",
+        "偏好",
+        "更爱",
+        "更喜欢",
+        "想要",
+        "爱吃",
+        "爱用",
+    ]
     return any(token in text for token in preference_tokens)
 
 
 def _looks_like_project_heuristic(text: str) -> bool:
     """判断文本是否描述项目或工作（启发式）。"""
-    project_tokens = ["最近", "正在", "重构", "开发", "项目", "工作", "学习", "写", "做", "维护"]
+    project_tokens = [
+        "最近",
+        "正在",
+        "重构",
+        "开发",
+        "项目",
+        "工作",
+        "学习",
+        "写",
+        "做",
+        "维护",
+    ]
     return any(token in text for token in project_tokens)
 
 
 def _looks_like_stable_fact_heuristic(text: str) -> bool:
     """判断文本是否描述稳定事实（启发式）。"""
-    fact_tokens = ["我是", "我叫", "我住", "我在", "我用", "我负责", "我做", "我的", "账号", "身份"]
+    fact_tokens = [
+        "我是",
+        "我叫",
+        "我住",
+        "我在",
+        "我用",
+        "我负责",
+        "我做",
+        "我的",
+        "账号",
+        "身份",
+    ]
     return any(token in text for token in fact_tokens)
 
 
